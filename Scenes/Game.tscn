@@ -1,0 +1,5 @@
+[gd_scene format=3 uid="uid://bfl3xb85h6jgn"]
+
+[node name="Node2D" type="Node2D" unique_id=1143210748]
+
+[node name="Popup" type="Popup" parent="." unique_id=1055834675]
