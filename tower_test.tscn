@@ -2,6 +2,9 @@
 
 [ext_resource type="Texture2D" uid="uid://q70ydj60vv36" path="res://Asets/Sprites/Enemys/Goblin/egmm.png" id="1_y4i6b"]
 
+[sub_resource type="SpriteFrames" id="SpriteFrames_y4i6b"]
+animations = []
+
 [node name="TowerTest" type="Node2D" unique_id=943308969]
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=260306403]
@@ -11,3 +14,5 @@ region_enabled = true
 region_rect = Rect2(72, 0, 24, 24)
 
 [node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=1462950448]
+sprite_frames = SubResource("SpriteFrames_y4i6b")
+animation = &""
