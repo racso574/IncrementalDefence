@@ -11,10 +11,16 @@ config_version=5
 [application]
 
 config/name="IncrementalDefence"
-run/main_scene="uid://ckv7k8s000i1t"
+run/main_scene="uid://bww8qtv6kpcj"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 boot_splash/show_image=false
 boot_splash/use_filter=false
+
+[autoload]
+
+ScenesManager="*res://Autoload/ScenesManager.gd"
+SaveSystem="*res://Autoload/Save/SaveSystem.gd"
+TransitionManager="*res://Autoload/Transitions/TransitionManager.gd"
 
 [display]
 

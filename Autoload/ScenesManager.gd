@@ -1,7 +1,7 @@
 extends Node
 class_name ScenesManager
 
-@export var scenes_root: String = "res://scenes"
+@export var scenes_root: String = "res://Scenes"
 @export var use_subfolder_keys: bool = false
 
 enum CacheMode { NONE, ON_DEMAND, PRELOAD_ALL }
@@ -12,7 +12,8 @@ var _paths: Dictionary[String, String] = {}          # key -> path
 var _cache: Dictionary[String, PackedScene] = {}     # key -> PackedScene
 
 var _payload: Variant = null
-var _stack: Array[String] = []
+var _current_key: String = ""
+var _previous_key: String = ""
 
 signal scene_changed(old_key: String, new_key: String)
 
@@ -24,8 +25,10 @@ func _ready() -> void:
 func index_scenes() -> void:
 	_paths.clear()
 	_cache.clear()
-	_stack.clear()
+	_current_key = ""
+	_previous_key = ""
 	_scan_dir(scenes_root)
+	_sync_current_from_tree()
 
 func list_scenes() -> Array[String]:
 	var keys: Array[String] = []
@@ -44,20 +47,19 @@ func get_scene_path(key: String) -> String:
 	return _paths[key]
 
 func change_to(key: String, data: Variant = null) -> void:
-	await _change(key, true, data)
+	_change(key, true, data)
 
 func reload_current() -> void:
-	if _stack.is_empty():
+	_sync_current_from_tree()
+	if _current_key == "":
 		return
-	var current: String = _stack.back()
-	await _change(current, false, _payload)
+	_change(_current_key, false, _payload)
 
 func back() -> void:
-	if _stack.size() < 2:
+	_sync_current_from_tree()
+	if _previous_key == "":
 		return
-	_stack.pop_back()
-	var prev: String = _stack.back()
-	await _change(prev, false, _payload)
+	_change(_previous_key, true, _payload)
 
 func set_payload(data: Variant) -> void:
 	_payload = data
@@ -79,10 +81,9 @@ func _change(key: String, push_stack: bool, data: Variant) -> void:
 		return
 
 	_payload = data
+	_sync_current_from_tree()
 
-	var old_key: String = ""
-	if not _stack.is_empty():
-		old_key = _stack.back()
+	var old_key: String = _current_key
 
 	var err: int = OK
 	if cache_mode == CacheMode.NONE:
@@ -100,7 +101,9 @@ func _change(key: String, push_stack: bool, data: Variant) -> void:
 		return
 
 	if push_stack:
-		_stack.append(key)
+		_previous_key = old_key
+
+	_current_key = key
 
 	scene_changed.emit(old_key, key)
 
@@ -117,6 +120,19 @@ func _get_packed(key: String) -> PackedScene:
 func _preload_all() -> void:
 	for key: String in _paths.keys():
 		_get_packed(key)
+
+func _sync_current_from_tree() -> void:
+	var tree: SceneTree = get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+
+	var scene_path: String = tree.current_scene.scene_file_path.strip_edges()
+	if scene_path == "":
+		return
+
+	var key: String = _key_from_path(scene_path)
+	if key != "":
+		_current_key = key
 
 func _scan_dir(dir_path: String) -> void:
 	var dir: DirAccess = DirAccess.open(dir_path)
@@ -158,3 +174,9 @@ func _make_key(full_path: String, file_name: String) -> String:
 		return rel
 	else:
 		return file_name.get_basename()
+
+func _key_from_path(path: String) -> String:
+	for key: String in _paths.keys():
+		if _paths[key] == path:
+			return key
+	return ""
