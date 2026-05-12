@@ -29,7 +29,22 @@ func _play_reveal() -> void:
 func _layout_panel() -> void:
 	var viewport_size: Vector2 = get_viewport_rect().size
 	var panel_scale: float = float(params.get("panel_scale", 1.28))
-	panel.size = viewport_size * panel_scale
+	var enter_from: String = String(params.get("enter_from", "top"))
+	var tilt_degrees: float = float(params.get("tilt_degrees", 0.0))
+	var diagonal_size: float = viewport_size.length() * panel_scale
+
+	if absf(tilt_degrees) > 0.01:
+		match enter_from:
+			"top", "bottom":
+				panel.size = Vector2(diagonal_size, viewport_size.y * panel_scale)
+			"left", "right":
+				panel.size = Vector2(viewport_size.x * panel_scale, diagonal_size)
+			_:
+				panel.size = Vector2(diagonal_size, viewport_size.y * panel_scale)
+	else:
+		panel.size = viewport_size * panel_scale
+
+	panel.pivot_offset = panel.size * 0.5
 	panel.rotation_degrees = float(params.get("tilt_degrees", 0.0))
 
 func _get_cover_position() -> Vector2:

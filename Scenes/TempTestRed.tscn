@@ -1,0 +1,54 @@
+[gd_scene format=3 uid="uid://dilcgqtlx3hhe"]
+
+[ext_resource type="Script" path="res://Scripts/TestSceneController.gd" id="1_l1w4a"]
+
+[sub_resource type="StyleBoxFlat" id="1"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="TempTestRed" type="Control" unique_id=1606997788]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_l1w4a")
+next_scene_key = "TempTestRight"
+transition_effect = "panel_drop_right"
+
+[node name="Background" type="ColorRect" parent="." unique_id=663558178]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.725, 0.136, 0.136, 1)
+
+[node name="Center" type="CenterContainer" parent="." unique_id=991074555]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="VBox" type="VBoxContainer" parent="Center" unique_id=192833026]
+layout_mode = 2
+theme_override_constants/separation = 20
+alignment = 1
+
+[node name="Title" type="Label" parent="Center/VBox" unique_id=314519422]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 40
+text = "TEMP TEST RED"
+horizontal_alignment = 1
+
+[node name="ActionButton" type="Button" parent="Center/VBox" unique_id=877745403]
+custom_minimum_size = Vector2(360, 60)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("1")
+theme_override_styles/pressed = SubResource("1")
+theme_override_styles/hover = SubResource("1")
+text = "GO TO RIGHT"

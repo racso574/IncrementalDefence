@@ -1,42 +1,192 @@
 extends CanvasLayer
-class_name TransitionManager
 
 const EFFECTS: Dictionary = {
 	"fade_black": {
-		"scene": "res://Scenes/Transitions/Effects/FadeEffect.tscn",
+		"scene": "res://Scenes/Transitions/FadeEffect.tscn",
 		"params": {
 			"color": Color(0, 0, 0, 1),
-			"duration": 0.22,
+			"duration": 0.25,
 			"trans": Tween.TRANS_SINE,
 			"ease": Tween.EASE_IN_OUT
 		}
 	},
 	"panel_drop_top": {
-		"scene": "res://Scenes/Transitions/Effects/PanelSlideEffect.tscn",
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
 		"params": {
 			"color": Color(0, 0, 0, 1),
-			"duration": 0.34,
+			"duration": 0.36,
 			"trans": Tween.TRANS_QUART,
 			"ease": Tween.EASE_IN_OUT,
 			"enter_from": "top",
 			"exit_mode": "reverse",
 			"panel_scale": 1.28,
 			"panel_margin": 96.0,
-			"tilt_degrees": -6.0
+			"tilt_degrees": 0.0
+		}
+	},
+	"panel_drop_bottom": {
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"enter_from": "bottom",
+			"exit_mode": "reverse",
+			"panel_scale": 1.28,
+			"panel_margin": 96.0,
+			"tilt_degrees": 0.0
 		}
 	},
 	"panel_drop_left": {
-		"scene": "res://Scenes/Transitions/Effects/PanelSlideEffect.tscn",
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
 		"params": {
 			"color": Color(0, 0, 0, 1),
-			"duration": 0.34,
+			"duration": 0.36,
 			"trans": Tween.TRANS_QUART,
 			"ease": Tween.EASE_IN_OUT,
 			"enter_from": "left",
 			"exit_mode": "reverse",
 			"panel_scale": 1.28,
 			"panel_margin": 96.0,
-			"tilt_degrees": 6.0
+			"tilt_degrees": 0.0
+		}
+	},
+	"panel_drop_right": {
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"enter_from": "right",
+			"exit_mode": "reverse",
+			"panel_scale": 1.28,
+			"panel_margin": 96.0,
+			"tilt_degrees": 0.0
+		}
+	},
+	"panel_drop_top_diagonal_ccw": {
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"enter_from": "top",
+			"exit_mode": "reverse",
+			"panel_scale": 1.55,
+			"panel_margin": 160.0,
+			"tilt_degrees": -10.0
+		}
+	},
+	"panel_drop_left_diagonal_cw": {
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"enter_from": "left",
+			"exit_mode": "reverse",
+			"panel_scale": 1.55,
+			"panel_margin": 160.0,
+			"tilt_degrees": 10.0
+		}
+	},
+	"panel_drop_bottom_diagonal_cw": {
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"enter_from": "bottom",
+			"exit_mode": "reverse",
+			"panel_scale": 1.55,
+			"panel_margin": 160.0,
+			"tilt_degrees": 10.0
+		}
+	},
+	"panel_drop_right_diagonal_ccw": {
+		"scene": "res://Scenes/Transitions/PanelSlideEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"enter_from": "right",
+			"exit_mode": "reverse",
+			"panel_scale": 1.55,
+			"panel_margin": 160.0,
+			"tilt_degrees": -10.0
+		}
+	},
+	"curtain_vertical": {
+		"scene": "res://Scenes/Transitions/CurtainPanelsEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"mode": "vertical",
+			"panel_scale": 1.18,
+			"panel_margin": 96.0,
+			"panel_overlap": 2.0,
+			"tilt_degrees": 0.0
+		}
+	},
+	"curtain_horizontal": {
+		"scene": "res://Scenes/Transitions/CurtainPanelsEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.36,
+			"trans": Tween.TRANS_QUART,
+			"ease": Tween.EASE_IN_OUT,
+			"mode": "horizontal",
+			"panel_scale": 1.18,
+			"panel_margin": 96.0,
+			"panel_overlap": 2.0,
+			"tilt_degrees": 0.0
+		}
+	},
+	"iris_circle": {
+		"scene": "res://Scenes/Transitions/IrisCircleEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.34,
+			"trans": Tween.TRANS_SINE,
+			"ease": Tween.EASE_IN_OUT,
+			"center_uv": Vector2(0.5, 0.5),
+			"feather_px": 2.0
+		}
+	},
+	"diamond_iris": {
+		"scene": "res://Scenes/Transitions/DiamondIrisEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.34,
+			"trans": Tween.TRANS_SINE,
+			"ease": Tween.EASE_IN_OUT,
+			"center_uv": Vector2(0.5, 0.5),
+			"feather_px": 2.0
+		}
+	},
+	"falling_strips": {
+		"scene": "res://Scenes/Transitions/FallingStripsEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.34,
+			"cover_duration": 0.72,
+			"reveal_duration": 0.34,
+			"column_count": 8,
+			"stagger": 0.075,
+			"overscan_y": 96.0,
+			"rest_top_extra": 24.0,
+			"cover_start_gap": 22.0,
+			"reveal_end_gap": 22.0,
+			"bounce_px": 52.0,
+			"bounce_variation": 0.22
 		}
 	}
 }
@@ -72,14 +222,16 @@ func list_effects() -> Array[String]:
 	keys.sort()
 	return keys
 
-func play(effect_id: String, overrides: Dictionary = {}) -> void:
-	await run_transition(effect_id, Callable(), overrides)
+func play(effect_id: String, action: Callable = Callable(), transition_params: Dictionary = {}) -> void:
+	await _run_transition(effect_id, action, transition_params)
 
-func change_scene(scene_key: String, effect_id: String = "fade_black", data: Variant = null, overrides: Dictionary = {}) -> void:
-	var action := Callable(self, "_change_scene_action").bind(scene_key, data)
-	await run_transition(effect_id, action, overrides)
+func change_scene(scene_key: String, effect_id: String = "fade_black", options: Dictionary = {}) -> void:
+	var scene_data: Variant = options.get("data", null)
+	var transition_params: Dictionary = _extract_transition_params(options)
+	var action := Callable(self, "_change_scene_action").bind(scene_key, scene_data)
+	await _run_transition(effect_id, action, transition_params)
 
-func run_transition(effect_id: String, action: Callable = Callable(), overrides: Dictionary = {}) -> void:
+func _run_transition(effect_id: String, action: Callable = Callable(), transition_params: Dictionary = {}) -> void:
 	if _is_running:
 		push_warning("TransitionManager: ya hay una transición en curso.")
 		return
@@ -99,7 +251,7 @@ func run_transition(effect_id: String, action: Callable = Callable(), overrides:
 
 	_active_effect = effect
 	_host.add_child(_active_effect)
-	_active_effect.configure(_merge_params(definition.get("params", {}), overrides))
+	_active_effect.configure(_merge_params(definition.get("params", {}), transition_params))
 
 	transition_started.emit(effect_id)
 
@@ -141,6 +293,12 @@ func _merge_params(base: Dictionary, overrides: Dictionary) -> Dictionary:
 	for key in overrides.keys():
 		merged[key] = overrides[key]
 	return merged
+
+func _extract_transition_params(options: Dictionary) -> Dictionary:
+	var transition_params: Variant = options.get("transition", {})
+	if transition_params is Dictionary:
+		return transition_params as Dictionary
+	return {}
 
 func _set_input_blocking(is_blocking: bool) -> void:
 	if _host == null:

@@ -1,5 +1,4 @@
 extends Node
-class_name SaveSystem
 
 const CURRENT_VERSION := 1
 const DEFAULT_SLOT := 0
@@ -65,7 +64,6 @@ func _load_or_create(path: String) -> SaveData:
 		var loaded := ResourceLoader.load(path)
 		if loaded is SaveData:
 			var sdata: SaveData = loaded
-			_migrate_if_needed(sdata)
 			_sanitize(sdata, slot)
 			return sdata
 		push_error("El save existe pero no es SaveData. Creo uno nuevo.")
@@ -85,7 +83,7 @@ func _save_to_path(path: String) -> void:
 	data.settings = SaveCodec.encode(data.settings)
 	data.meta = SaveCodec.encode(data.meta)
 	data.state = SaveCodec.encode(data.state)
-	data.entities = SaveCodec.encode(data.entities)
+	data.entities = _encode_entities(data.entities)
 
 	data.version = CURRENT_VERSION
 	var err := ResourceSaver.save(data, path)
@@ -96,7 +94,7 @@ func _save_to_path(path: String) -> void:
 	data.settings = SaveCodec.decode(data.settings)
 	data.meta = SaveCodec.decode(data.meta)
 	data.state = SaveCodec.decode(data.state)
-	data.entities = SaveCodec.decode(data.entities)
+	data.entities = _decode_entities(data.entities)
 
 # ---------------- Defaults / Saneado / Migración ----------------
 func _create_default(s: int) -> SaveData:
@@ -119,7 +117,11 @@ func _create_default(s: int) -> SaveData:
 	}
 
 	sd.state = {
-		"coins": 0,
+		"currencies": {
+			"gold": 0,
+			"silver": 0,
+			"bronze": 0
+		},
 		"wave": 1
 	}
 
@@ -140,7 +142,7 @@ func _sanitize(sd: SaveData, s: int) -> void:
 	sd.settings = SaveCodec.decode(sd.settings)
 	sd.meta = SaveCodec.decode(sd.meta)
 	sd.state = SaveCodec.decode(sd.state)
-	sd.entities = SaveCodec.decode(sd.entities)
+	sd.entities = _decode_entities(sd.entities)
 
 	# Rellenar defaults sin pisar lo existente
 	var def := _create_default(s)
@@ -154,6 +156,16 @@ func _sanitize(sd: SaveData, s: int) -> void:
 		if not sd.state.has(k):
 			sd.state[k] = def.state[k]
 
+	if typeof(sd.state.get("currencies", null)) != TYPE_DICTIONARY:
+		sd.state["currencies"] = {}
+
+	var currencies: Dictionary = sd.state["currencies"]
+	var default_currencies: Dictionary = def.state["currencies"]
+	for currency_id in default_currencies.keys():
+		if not currencies.has(currency_id):
+			currencies[currency_id] = default_currencies[currency_id]
+
+
 	# Asegurar meta.slot correcto (opcional, útil)
 	sd.meta["slot"] = s
 
@@ -166,18 +178,28 @@ func _sanitize(sd: SaveData, s: int) -> void:
 			push_warning("Entidad inválida ignorada (no Dictionary): %s" % e)
 	sd.entities = cleaned
 
-func _migrate_if_needed(sd: SaveData) -> void:
-	if sd.version == CURRENT_VERSION:
-		return
+func _encode_entities(source: Array) -> Array[Dictionary]:
+	var encoded: Array[Dictionary] = []
+	for entry in source:
+		var encoded_entry: Variant = SaveCodec.encode(entry)
+		if typeof(encoded_entry) == TYPE_DICTIONARY:
+			encoded.append(encoded_entry)
+		else:
+			push_warning("Entidad no codificable ignorada: %s" % entry)
+	return encoded
+
+func _decode_entities(source: Array) -> Array[Dictionary]:
+	var decoded: Array[Dictionary] = []
+	for entry in source:
+		var decoded_entry: Variant = SaveCodec.decode(entry)
+		if typeof(decoded_entry) == TYPE_DICTIONARY:
+			decoded.append(decoded_entry)
+		else:
+			push_warning("Entidad inválida tras decode ignorada: %s" % entry)
+	return decoded
 
 	# Aquí pondrás migraciones reales cuando subas CURRENT_VERSION
-	# Ejemplo:
-	# if sd.version == 1:
-	#     sd.state["gold"] = sd.state.get("coins", 0)
-	#     sd.state.erase("coins")
-	#     sd.version = 2
 
-	sd.version = CURRENT_VERSION
 
 func _update_meta_before_save(sd: SaveData) -> void:
 	var now := int(Time.get_unix_time_from_system())

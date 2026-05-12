@@ -18,14 +18,14 @@ boot_splash/use_filter=false
 
 [autoload]
 
-ScenesManager="*res://Autoload/ScenesManager.gd"
+ScenesManager="*res://Autoload/ScenesManager/ScenesManager.gd"
 SaveSystem="*res://Autoload/Save/SaveSystem.gd"
 TransitionManager="*res://Autoload/Transitions/TransitionManager.gd"
+CurrencySystem="*res://Autoload/Currency/CurrencySystem.gd"
 
 [display]
 
-window/stretch/mode="viewport"
-window/stretch/scale_mode="integer"
+window/stretch/mode="canvas_items"
 
 [physics]
 

@@ -1,8 +1,11 @@
 extends Node
-class_name ScenesManager
 
-@export var scenes_root: String = "res://Scenes"
-@export var use_subfolder_keys: bool = false
+const SCENE_REGISTRY := {
+	"Menu": "res://Scenes/Menu.tscn",
+	"Game": "res://Scenes/Game.tscn",
+	"GameTest": "res://Scenes/GameTest.tscn",
+	"Options": "res://Scenes/Options.tscn"
+}
 
 enum CacheMode { NONE, ON_DEMAND, PRELOAD_ALL }
 @export var cache_mode: CacheMode = CacheMode.ON_DEMAND
@@ -27,7 +30,12 @@ func index_scenes() -> void:
 	_cache.clear()
 	_current_key = ""
 	_previous_key = ""
-	_scan_dir(scenes_root)
+	for key in SCENE_REGISTRY.keys():
+		var scene_path: String = String(SCENE_REGISTRY[key])
+		if not ResourceLoader.exists(scene_path):
+			push_error("ScenesManager: no existe la escena registrada '" + key + "' -> " + scene_path)
+			continue
+		_paths[String(key)] = scene_path
 	_sync_current_from_tree()
 
 func list_scenes() -> Array[String]:
@@ -77,7 +85,7 @@ func _change(key: String, push_stack: bool, data: Variant) -> void:
 	key = key.strip_edges()
 
 	if not _paths.has(key):
-		push_error("ScenesManager: no existe la escena '" + key + "'. Escaneado en: " + scenes_root)
+		push_error("ScenesManager: no existe la escena registrada '" + key + "'.")
 		return
 
 	_payload = data
@@ -133,47 +141,6 @@ func _sync_current_from_tree() -> void:
 	var key: String = _key_from_path(scene_path)
 	if key != "":
 		_current_key = key
-
-func _scan_dir(dir_path: String) -> void:
-	var dir: DirAccess = DirAccess.open(dir_path)
-	if dir == null:
-		push_error("ScenesManager: no puedo abrir carpeta: " + dir_path)
-		return
-
-	dir.list_dir_begin()
-	var name: String = dir.get_next()
-
-	while name != "":
-		if name.begins_with("."):
-			name = dir.get_next()
-			continue
-
-		var full: String = dir_path.path_join(name)
-
-		if dir.current_is_dir():
-			_scan_dir(full)
-		else:
-			if name.get_extension() == "tscn":
-				var key: String = _make_key(full, name)
-				if _paths.has(key):
-					push_warning("ScenesManager: clave duplicada '" + key + "' -> " + full)
-				else:
-					_paths[key] = full
-
-		name = dir.get_next()
-
-	dir.list_dir_end()
-
-func _make_key(full_path: String, file_name: String) -> String:
-	if use_subfolder_keys:
-		var rel: String = full_path
-		var prefix: String = scenes_root + "/"
-		if rel.begins_with(prefix):
-			rel = rel.substr(prefix.length())
-		rel = rel.trim_suffix(".tscn")
-		return rel
-	else:
-		return file_name.get_basename()
 
 func _key_from_path(path: String) -> String:
 	for key: String in _paths.keys():

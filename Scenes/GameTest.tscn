@@ -1,0 +1,148 @@
+[gd_scene format=3 uid="uid://crv5g8j2t2g0v"]
+
+[ext_resource type="Script" path="res://Scripts/Gameplay/GameTestController.gd" id="1_s4drq"]
+[ext_resource type="Script" path="res://Scripts/Gameplay/HealthController.gd" id="2_xq5h4"]
+[ext_resource type="Script" path="res://Scripts/UI/CurrencyValueLabel.gd" id="3_7v7o4"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthValueLabel.gd" id="4_y5p8d"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthBarDisplay.gd" id="5_ta4j0"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hud"]
+bg_color = Color(0.0941176, 0.109804, 0.105882, 0.75)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tower_body"]
+bg_color = Color(0.301961, 0.337255, 0.360784, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tower_core"]
+bg_color = Color(0.843137, 0.709804, 0.294118, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tower_cap"]
+bg_color = Color(0.2, 0.227451, 0.243137, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_bar"]
+bg_color = Color(0.12549, 0.152941, 0.121569, 0.9)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_fill"]
+bg_color = Color(0.384314, 0.803922, 0.337255, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="GameTest" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_s4drq")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.301961, 0.572549, 0.247059, 1)
+
+[node name="TopHud" type="Panel" parent="."]
+custom_minimum_size = Vector2(220, 58)
+layout_mode = 0
+offset_left = 22.0
+offset_top = 22.0
+offset_right = 242.0
+offset_bottom = 80.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+
+[node name="GoldLabel" type="Label" parent="TopHud"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 10.0
+offset_right = -16.0
+offset_bottom = -10.0
+theme_override_colors/font_color = Color(0.976471, 0.913725, 0.52549, 1)
+theme_override_font_sizes/font_size = 26
+vertical_alignment = 1
+script = ExtResource("3_7v7o4")
+prefix = "Gold: "
+show_currency_name = false
+currency_id = "gold"
+
+[node name="TowerAnchor" type="CenterContainer" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TowerWrap" type="VBoxContainer" parent="TowerAnchor"]
+layout_mode = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="TowerHealthLabel" type="Label" parent="TowerAnchor/TowerWrap"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+script = ExtResource("4_y5p8d")
+health_controller_path = NodePath("../TowerBody/HealthController")
+prefix = "HP "
+
+[node name="TowerBody" type="Panel" parent="TowerAnchor/TowerWrap"]
+custom_minimum_size = Vector2(170, 170)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tower_body")
+
+[node name="HealthController" type="Node" parent="TowerAnchor/TowerWrap/TowerBody"]
+script = ExtResource("2_xq5h4")
+max_health = 100
+
+[node name="Core" type="Panel" parent="TowerAnchor/TowerWrap/TowerBody"]
+custom_minimum_size = Vector2(74, 74)
+layout_mode = 0
+offset_left = 48.0
+offset_top = 54.0
+offset_right = 122.0
+offset_bottom = 128.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_tower_core")
+
+[node name="Cap" type="Panel" parent="TowerAnchor/TowerWrap/TowerBody"]
+custom_minimum_size = Vector2(56, 24)
+layout_mode = 0
+offset_left = 57.0
+offset_top = 18.0
+offset_right = 113.0
+offset_bottom = 42.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_tower_cap")
+
+[node name="TowerHealthBar" type="ProgressBar" parent="TowerAnchor/TowerWrap"]
+custom_minimum_size = Vector2(210, 22)
+layout_mode = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_health_bar")
+theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
+show_percentage = false
+script = ExtResource("5_ta4j0")
+health_controller_path = NodePath("../TowerBody/HealthController")
