@@ -11,10 +11,13 @@ signal died()
 var current_health: int = 0
 var is_dead: bool = false
 
-func _ready() -> void:
+func _enter_tree() -> void:
 	max_health = maxi(max_health, 1)
 	current_health = max_health
 	is_dead = false
+
+func _ready() -> void:
+	health_changed.emit(current_health, max_health, 0)
 
 func get_health() -> int:
 	return current_health

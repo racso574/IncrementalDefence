@@ -21,6 +21,7 @@ func _ready() -> void:
 	_health_controller.health_changed.connect(_on_health_changed)
 	_displayed_health = float(_health_controller.get_health())
 	_refresh()
+	call_deferred("_sync_initial_display")
 
 func _resolve_health_controller() -> HealthController:
 	if not health_controller_path.is_empty():
@@ -54,6 +55,12 @@ func _refresh() -> void:
 
 func _on_health_changed(_current_health: int, _max_health: int, _delta: int) -> void:
 	_animate_to(float(_current_health))
+	_refresh()
+
+func _sync_initial_display() -> void:
+	if _health_controller == null:
+		return
+	_displayed_health = float(_health_controller.get_health())
 	_refresh()
 
 func _animate_to(target_health: float) -> void:

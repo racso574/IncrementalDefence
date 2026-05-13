@@ -25,24 +25,39 @@ func _on_configured() -> void:
 	_shader_material.set_shader_parameter("radius_px", _max_radius_px)
 	_shader_material.set_shader_parameter("feather_px", float(params.get("feather_px", 2.0)))
 	_shader_material.set_shader_parameter("tint", params.get("color", Color(0, 0, 0, 1)))
+	_shader_material.set_shader_parameter("invert_mask", bool(params.get("invert", false)))
 	visible = false
 
 func _play_cover() -> void:
-	_shader_material.set_shader_parameter("radius_px", _max_radius_px)
+	var is_inverted: bool = bool(params.get("invert", false))
+	var from_radius: float = _max_radius_px
+	var to_radius: float = MIN_RADIUS_PX
+	if is_inverted:
+		from_radius = MIN_RADIUS_PX
+		to_radius = _max_radius_px
+
+	_shader_material.set_shader_parameter("radius_px", from_radius)
 
 	var tween := create_tween()
 	tween.set_trans(get_tween_trans())
 	tween.set_ease(get_tween_ease())
-	tween.tween_method(_set_radius_px, _max_radius_px, MIN_RADIUS_PX, get_duration("cover_duration", 0.34))
-	tween.finished.connect(finish_cover)
+	tween.tween_method(_set_radius_px, from_radius, to_radius, get_duration("cover_duration", 0.34))
+	tween.finished.connect(_on_cover_tween_finished)
 
 func _play_reveal() -> void:
-	_shader_material.set_shader_parameter("radius_px", MIN_RADIUS_PX)
+	var is_inverted: bool = bool(params.get("invert", false))
+	var from_radius: float = MIN_RADIUS_PX
+	var to_radius: float = _max_radius_px
+	if is_inverted:
+		from_radius = _max_radius_px
+		to_radius = MIN_RADIUS_PX
+
+	_shader_material.set_shader_parameter("radius_px", from_radius)
 
 	var tween := create_tween()
 	tween.set_trans(get_tween_trans())
 	tween.set_ease(get_tween_ease())
-	tween.tween_method(_set_radius_px, MIN_RADIUS_PX, _max_radius_px, get_duration("reveal_duration", 0.34))
+	tween.tween_method(_set_radius_px, from_radius, to_radius, get_duration("reveal_duration", 0.34))
 	tween.finished.connect(finish_reveal)
 
 func _setup_material() -> void:
@@ -58,12 +73,16 @@ uniform vec2 center_px = vec2(960.0, 540.0);
 uniform float radius_px = 1024.0;
 uniform float feather_px = 2.0;
 uniform vec4 tint : source_color = vec4(0.0, 0.0, 0.0, 1.0);
+uniform bool invert_mask = false;
 
 void fragment() {
 	vec2 pixel_pos = UV * screen_size;
 	vec2 delta = abs(pixel_pos - center_px);
 	float dist_px = delta.x + delta.y;
 	float alpha = smoothstep(radius_px - feather_px, radius_px + feather_px, dist_px);
+	if (invert_mask) {
+		alpha = 1.0 - alpha;
+	}
 	COLOR = vec4(tint.rgb, tint.a * alpha);
 }
 """
@@ -73,6 +92,14 @@ void fragment() {
 	overlay.material = _shader_material
 
 func _resolve_center_px() -> Vector2:
+	if bool(params.get("random_center", false)):
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		return Vector2(
+			rng.randf_range(0.15 * _screen_size.x, 0.85 * _screen_size.x),
+			rng.randf_range(0.15 * _screen_size.y, 0.85 * _screen_size.y)
+		)
+
 	var center_px_value: Variant = params.get("center_px", null)
 	if center_px_value is Vector2:
 		return center_px_value as Vector2
@@ -99,3 +126,9 @@ func _compute_max_radius(center_px: Vector2, screen_size: Vector2) -> float:
 
 func _set_radius_px(value: float) -> void:
 	_shader_material.set_shader_parameter("radius_px", value)
+
+func _on_cover_tween_finished() -> void:
+	var hold_duration: float = float(params.get("cover_hold_duration", 0.0))
+	if hold_duration > 0.0:
+		await get_tree().create_timer(hold_duration).timeout
+	finish_cover()

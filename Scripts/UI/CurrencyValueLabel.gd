@@ -15,6 +15,7 @@ func _ready() -> void:
 	CurrencySystem.currency_changed.connect(_on_currency_changed)
 	_displayed_amount = float(CurrencySystem.get_amount(currency_id))
 	_refresh()
+	call_deferred("_sync_initial_display")
 
 func _refresh() -> void:
 	var amount := int(round(_displayed_amount))
@@ -48,4 +49,8 @@ func _animate_to(target_amount: float) -> void:
 
 func _set_displayed_amount(value: float) -> void:
 	_displayed_amount = value
+	_refresh()
+
+func _sync_initial_display() -> void:
+	_displayed_amount = float(CurrencySystem.get_amount(currency_id))
 	_refresh()

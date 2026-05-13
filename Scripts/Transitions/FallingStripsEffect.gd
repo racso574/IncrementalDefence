@@ -99,7 +99,11 @@ func _run_cover_tweens() -> void:
 func _run_reveal_tweens() -> void:
 	var stagger: float = float(params.get("stagger", 0.05))
 	var duration: float = get_duration("reveal_duration", 0.34)
-	var end_y: float = -(_strips[0].size.y + float(params.get("reveal_end_gap", 22.0)))
+	var reveal_direction: String = String(params.get("reveal_direction", "up"))
+	var reveal_gap: float = float(params.get("reveal_end_gap", 22.0))
+	var end_y: float = -(_strips[0].size.y + reveal_gap)
+	if reveal_direction == "down":
+		end_y = get_viewport_rect().size.y + reveal_gap
 
 	_pending_tweens = _strips.size()
 	for i in range(_strips.size()):

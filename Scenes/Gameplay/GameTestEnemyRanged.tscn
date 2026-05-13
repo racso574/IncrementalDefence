@@ -1,0 +1,103 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/Gameplay/GameTestEnemy.gd" id="1_3v1jg"]
+[ext_resource type="Script" path="res://Scripts/Gameplay/HealthController.gd" id="2_127gh"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthBarDisplay.gd" id="3_xw2ce"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthValueLabel.gd" id="4_hf2fj"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_body"]
+bg_color = Color(0.4, 0.270588, 0.654902, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_accent"]
+bg_color = Color(1, 0.905882, 0.588235, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_health_bg"]
+bg_color = Color(0.109804, 0.12549, 0.113725, 0.95)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_health_fill"]
+bg_color = Color(0.627451, 0.768627, 1, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="GameTestEnemyRanged" type="Control"]
+offset_right = 58.0
+offset_bottom = 78.0
+mouse_filter = 2
+script = ExtResource("1_3v1jg")
+move_speed = 80.0
+attack_interval = 1.2
+attack_damage = 2
+gold_reward = 50
+attack_mode = 1
+preferred_ring_radius = 215.0
+projectile_travel_duration = 0.28
+projectile_size = 10.0
+projectile_color = Color(0.960784, 0.768627, 0.360784, 1)
+move_body_color = Color(0.52549, 0.345098, 0.866667, 1)
+move_accent_color = Color(1, 0.921569, 0.631373, 1)
+attack_body_color = Color(0.886275, 0.345098, 0.572549, 1)
+attack_accent_color = Color(1, 0.92549, 0.662745, 1)
+
+[node name="HealthController" type="Node" parent="."]
+script = ExtResource("2_127gh")
+max_health = 4
+
+[node name="HealthBar" type="ProgressBar" parent="."]
+custom_minimum_size = Vector2(48, 10)
+layout_mode = 0
+offset_left = 5.0
+offset_top = 0.0
+offset_right = 53.0
+offset_bottom = 10.0
+theme_override_styles/background = SubResource("StyleBoxFlat_enemy_health_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_enemy_health_fill")
+show_percentage = false
+script = ExtResource("3_xw2ce")
+health_controller_path = NodePath("../HealthController")
+animation_duration = 0.08
+
+[node name="Body" type="Panel" parent="."]
+custom_minimum_size = Vector2(34, 34)
+layout_mode = 0
+offset_left = 12.0
+offset_top = 17.0
+offset_right = 46.0
+offset_bottom = 51.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_enemy_body")
+
+[node name="Accent" type="Panel" parent="Body"]
+custom_minimum_size = Vector2(12, 12)
+layout_mode = 0
+offset_left = 11.0
+offset_top = 11.0
+offset_right = 23.0
+offset_bottom = 23.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_enemy_accent")
+
+[node name="HealthLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 5.0
+offset_top = 58.0
+offset_right = 53.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+script = ExtResource("4_hf2fj")
+health_controller_path = NodePath("../HealthController")
+show_max_health = false
+animation_duration = 0.1

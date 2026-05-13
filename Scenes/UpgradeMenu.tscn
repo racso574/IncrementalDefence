@@ -1,0 +1,121 @@
+[gd_scene format=3 uid="uid://dgcn1mdo7o4th"]
+
+[ext_resource type="Script" path="res://Scripts/Gameplay/UpgradeMenuController.gd" id="1_9f7ha"]
+[ext_resource type="Script" path="res://Scripts/UI/CurrencyValueLabel.gd" id="2_0g14h"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.0823529, 0.0941176, 0.0980392, 0.9)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button"]
+bg_color = Color(0.878431, 0.796078, 0.470588, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_button_dark"]
+bg_color = Color(0.882353, 0.333333, 0.301961, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="UpgradeMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_9f7ha")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.129412, 0.180392, 0.176471, 1)
+
+[node name="GoldPanel" type="Panel" parent="."]
+custom_minimum_size = Vector2(220, 58)
+layout_mode = 0
+offset_left = 22.0
+offset_top = 22.0
+offset_right = 242.0
+offset_bottom = 80.0
+z_index = 30
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="GoldLabel" type="Label" parent="GoldPanel"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 10.0
+offset_right = -16.0
+offset_bottom = -10.0
+theme_override_colors/font_color = Color(0.976471, 0.913725, 0.52549, 1)
+theme_override_font_sizes/font_size = 26
+vertical_alignment = 1
+script = ExtResource("2_0g14h")
+prefix = "Gold: "
+currency_id = "gold"
+
+[node name="BoardViewport" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+clip_contents = true
+mouse_filter = 0
+
+[node name="BoardRoot" type="Control" parent="BoardViewport"]
+layout_mode = 0
+offset_right = 3600.0
+offset_bottom = 2400.0
+mouse_filter = 2
+
+[node name="EndRunButton" type="Button" parent="."]
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 1
+anchors_preset = 3
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 22.0
+offset_top = -78.0
+offset_right = 222.0
+offset_bottom = -22.0
+z_index = 30
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_button_dark")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button_dark")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button_dark")
+text = "End Run"
+
+[node name="ContinueButton" type="Button" parent="."]
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 1
+anchors_preset = 9
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -222.0
+offset_top = -78.0
+offset_right = -22.0
+offset_bottom = -22.0
+z_index = 30
+theme_override_colors/font_color = Color(0.0901961, 0.0901961, 0.0901961, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_button")
+text = "Continue"

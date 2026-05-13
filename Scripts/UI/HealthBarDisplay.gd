@@ -16,6 +16,7 @@ func _ready() -> void:
 
 	_health_controller.health_changed.connect(_on_health_changed)
 	_refresh()
+	call_deferred("_sync_initial_display")
 
 func _resolve_health_controller() -> HealthController:
 	if not health_controller_path.is_empty():
@@ -51,3 +52,10 @@ func _on_health_changed(current_health: int, max_health: int, _delta: int) -> vo
 
 	_bar_tween = create_tween()
 	_bar_tween.tween_property(self, "value", float(current_health), animation_duration)
+
+func _sync_initial_display() -> void:
+	if _health_controller == null:
+		return
+	if _bar_tween != null:
+		_bar_tween.kill()
+	_refresh()

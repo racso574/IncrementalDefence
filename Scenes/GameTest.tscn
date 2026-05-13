@@ -48,6 +48,13 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_end_run_button"]
+bg_color = Color(0.607843, 0.207843, 0.176471, 0.92)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
 [node name="GameTest" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -72,6 +79,7 @@ offset_left = 22.0
 offset_top = 22.0
 offset_right = 242.0
 offset_bottom = 80.0
+z_index = 30
 theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
 
 [node name="GoldLabel" type="Label" parent="TopHud"]
@@ -90,59 +98,150 @@ prefix = "Gold: "
 show_currency_name = false
 currency_id = "gold"
 
+[node name="TopRightHud" type="Panel" parent="."]
+custom_minimum_size = Vector2(220, 58)
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -242.0
+offset_top = 22.0
+offset_right = -22.0
+offset_bottom = 80.0
+z_index = 30
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+
+[node name="TimeLabel" type="Label" parent="TopRightHud"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 10.0
+offset_right = -16.0
+offset_bottom = -10.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 24
+text = "Time: 00:00"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="EnemyLayer" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 10
+
 [node name="TowerAnchor" type="CenterContainer" parent="."]
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+z_index = 20
 
 [node name="TowerWrap" type="VBoxContainer" parent="TowerAnchor"]
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 10
 alignment = 1
 
 [node name="TowerHealthLabel" type="Label" parent="TowerAnchor/TowerWrap"]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 22
 horizontal_alignment = 1
 script = ExtResource("4_y5p8d")
 health_controller_path = NodePath("../TowerBody/HealthController")
 prefix = "HP "
 
 [node name="TowerBody" type="Panel" parent="TowerAnchor/TowerWrap"]
-custom_minimum_size = Vector2(170, 170)
+custom_minimum_size = Vector2(144, 144)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_tower_body")
 
 [node name="HealthController" type="Node" parent="TowerAnchor/TowerWrap/TowerBody"]
 script = ExtResource("2_xq5h4")
-max_health = 100
+max_health = 150
+
+[node name="DamageFlash" type="ColorRect" parent="TowerAnchor/TowerWrap/TowerBody"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+modulate = Color(1, 1, 1, 0)
+color = Color(1, 0.282353, 0.219608, 1)
 
 [node name="Core" type="Panel" parent="TowerAnchor/TowerWrap/TowerBody"]
-custom_minimum_size = Vector2(74, 74)
+custom_minimum_size = Vector2(62, 62)
 layout_mode = 0
-offset_left = 48.0
-offset_top = 54.0
-offset_right = 122.0
-offset_bottom = 128.0
+offset_left = 41.0
+offset_top = 46.0
+offset_right = 103.0
+offset_bottom = 108.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_tower_core")
 
 [node name="Cap" type="Panel" parent="TowerAnchor/TowerWrap/TowerBody"]
-custom_minimum_size = Vector2(56, 24)
+custom_minimum_size = Vector2(46, 20)
 layout_mode = 0
-offset_left = 57.0
-offset_top = 18.0
-offset_right = 113.0
-offset_bottom = 42.0
+offset_left = 49.0
+offset_top = 16.0
+offset_right = 95.0
+offset_bottom = 36.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_tower_cap")
 
 [node name="TowerHealthBar" type="ProgressBar" parent="TowerAnchor/TowerWrap"]
-custom_minimum_size = Vector2(210, 22)
+custom_minimum_size = Vector2(184, 18)
 layout_mode = 2
 theme_override_styles/background = SubResource("StyleBoxFlat_health_bar")
 theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
 show_percentage = false
 script = ExtResource("5_ta4j0")
 health_controller_path = NodePath("../TowerBody/HealthController")
+
+[node name="BottomRightHud" type="Panel" parent="."]
+custom_minimum_size = Vector2(116, 46)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = 442.0
+offset_top = -68.0
+offset_right = 558.0
+offset_bottom = -22.0
+grow_horizontal = 0
+grow_vertical = 0
+z_index = 30
+theme_override_styles/panel = SubResource("StyleBoxFlat_hud")
+
+[node name="EndRunButton" type="Button" parent="BottomRightHud"]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+focus_mode = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBoxFlat_end_run_button")
+theme_override_styles/hover = SubResource("StyleBoxFlat_end_run_button")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_end_run_button")
+text = "End Run"
+
+[node name="EffectLayer" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 25

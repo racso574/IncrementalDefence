@@ -161,6 +161,19 @@ const EFFECTS: Dictionary = {
 			"feather_px": 2.0
 		}
 	},
+	"iris_inverse": {
+		"scene": "res://Scenes/Transitions/IrisCircleEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.34,
+			"trans": Tween.TRANS_SINE,
+			"ease": Tween.EASE_IN_OUT,
+			"center_uv": Vector2(0.5, 0.5),
+			"feather_px": 2.0,
+			"cover_hold_duration": 0.1,
+			"invert": true
+		}
+	},
 	"diamond_iris": {
 		"scene": "res://Scenes/Transitions/DiamondIrisEffect.tscn",
 		"params": {
@@ -170,6 +183,19 @@ const EFFECTS: Dictionary = {
 			"ease": Tween.EASE_IN_OUT,
 			"center_uv": Vector2(0.5, 0.5),
 			"feather_px": 2.0
+		}
+	},
+	"diamond_inverse": {
+		"scene": "res://Scenes/Transitions/DiamondIrisEffect.tscn",
+		"params": {
+			"color": Color(0, 0, 0, 1),
+			"duration": 0.34,
+			"trans": Tween.TRANS_SINE,
+			"ease": Tween.EASE_IN_OUT,
+			"center_uv": Vector2(0.5, 0.5),
+			"feather_px": 2.0,
+			"cover_hold_duration": 0.1,
+			"invert": true
 		}
 	},
 	"falling_strips": {

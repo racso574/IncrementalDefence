@@ -1,0 +1,94 @@
+[gd_scene format=3 uid="uid://djq11kr5y30qh"]
+
+[ext_resource type="Script" path="res://Scripts/Gameplay/GameTestEnemy.gd" id="1_3v1jg"]
+[ext_resource type="Script" path="res://Scripts/Gameplay/HealthController.gd" id="2_127gh"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthBarDisplay.gd" id="3_xw2ce"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthValueLabel.gd" id="4_hf2fj"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_body"]
+bg_color = Color(0.352941, 0.572549, 0.831373, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_accent"]
+bg_color = Color(0.964706, 0.972549, 0.980392, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_health_bg"]
+bg_color = Color(0.109804, 0.12549, 0.113725, 0.95)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_health_fill"]
+bg_color = Color(0.47451, 0.862745, 0.411765, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="GameTestEnemy" type="Control"]
+offset_right = 64.0
+offset_bottom = 84.0
+mouse_filter = 2
+script = ExtResource("1_3v1jg")
+move_speed = 60.0
+attack_interval = 1.0
+attack_damage = 1
+gold_reward = 50
+
+[node name="HealthController" type="Node" parent="."]
+script = ExtResource("2_127gh")
+max_health = 3
+
+[node name="HealthBar" type="ProgressBar" parent="."]
+custom_minimum_size = Vector2(54, 10)
+layout_mode = 0
+offset_left = 5.0
+offset_top = 0.0
+offset_right = 59.0
+offset_bottom = 10.0
+theme_override_styles/background = SubResource("StyleBoxFlat_enemy_health_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_enemy_health_fill")
+show_percentage = false
+script = ExtResource("3_xw2ce")
+health_controller_path = NodePath("../HealthController")
+animation_duration = 0.08
+
+[node name="Body" type="Panel" parent="."]
+custom_minimum_size = Vector2(40, 40)
+layout_mode = 0
+offset_left = 12.0
+offset_top = 17.0
+offset_right = 52.0
+offset_bottom = 57.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_enemy_body")
+
+[node name="Accent" type="Panel" parent="Body"]
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 0
+offset_left = 13.0
+offset_top = 13.0
+offset_right = 27.0
+offset_bottom = 27.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_enemy_accent")
+
+[node name="HealthLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 5.0
+offset_top = 62.0
+offset_right = 59.0
+offset_bottom = 80.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+script = ExtResource("4_hf2fj")
+health_controller_path = NodePath("../HealthController")
+show_max_health = false
+animation_duration = 0.1

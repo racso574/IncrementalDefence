@@ -39,26 +39,36 @@ func _layout_panels() -> void:
 	var overlap: float = float(params.get("panel_overlap", 2.0))
 	var tilt_degrees: float = float(params.get("tilt_degrees", 0.0))
 	var tint: Color = params.get("color", Color(0, 0, 0, 1))
+	if absf(tilt_degrees) > 0.01:
+		overlap = maxf(overlap, 18.0)
 
 	panel_a.color = tint
 	panel_b.color = tint
 
 	var diagonal_size: float = viewport_size.length() * panel_scale
+	if absf(tilt_degrees) > 0.01:
+		diagonal_size += panel_margin * 0.85
 	if mode == "horizontal":
 		var width: float = viewport_size.x * 0.5 + panel_margin + overlap
 		var height: float = diagonal_size if absf(tilt_degrees) > 0.01 else viewport_size.y * panel_scale
+		if absf(tilt_degrees) > 0.01:
+			width += panel_margin * 0.45
+			height += panel_margin * 0.45
 		panel_a.size = Vector2(width, height)
 		panel_b.size = Vector2(width, height)
 	else:
 		var width_v: float = diagonal_size if absf(tilt_degrees) > 0.01 else viewport_size.x * panel_scale
 		var height_v: float = viewport_size.y * 0.5 + panel_margin + overlap
+		if absf(tilt_degrees) > 0.01:
+			width_v += panel_margin * 0.45
+			height_v += panel_margin * 0.45
 		panel_a.size = Vector2(width_v, height_v)
 		panel_b.size = Vector2(width_v, height_v)
 
 	panel_a.pivot_offset = panel_a.size * 0.5
 	panel_b.pivot_offset = panel_b.size * 0.5
 	panel_a.rotation_degrees = tilt_degrees
-	panel_b.rotation_degrees = -tilt_degrees
+	panel_b.rotation_degrees = tilt_degrees
 
 func _get_cover_position(is_first: bool) -> Vector2:
 	var viewport_size: Vector2 = get_viewport_rect().size
