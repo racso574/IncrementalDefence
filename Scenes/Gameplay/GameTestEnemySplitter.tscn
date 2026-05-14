@@ -1,0 +1,108 @@
+[gd_scene format=3 load_steps=7]
+
+[ext_resource type="Script" path="res://Scripts/Gameplay/GameTestEnemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://Scripts/Gameplay/HealthController.gd" id="2_health"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthBarDisplay.gd" id="3_bar"]
+[ext_resource type="Script" path="res://Scripts/UI/HealthValueLabel.gd" id="4_label"]
+[ext_resource type="Script" path="res://Scripts/Gameplay/EnemySplitSpawn.gd" id="5_split"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemySplitterShard.tscn" id="6_shard"]
+
+[sub_resource type="Resource" id="EnemySplitSpawn_splitter"]
+script = ExtResource("5_split")
+enemy_scene = ExtResource("6_shard")
+count = 2
+arc_degrees = 20.0
+spawn_separation_radius = 16.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_body"]
+bg_color = Color(0.462745, 0.32549, 0.686275, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_accent"]
+bg_color = Color(0.960784, 0.882353, 0.65098, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_health_bg"]
+bg_color = Color(0.109804, 0.12549, 0.113725, 0.95)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_enemy_health_fill"]
+bg_color = Color(0.741176, 0.666667, 0.956863, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="GameTestEnemySplitter" type="Control"]
+offset_right = 84.0
+offset_bottom = 106.0
+mouse_filter = 2
+script = ExtResource("1_enemy")
+move_speed = 42.0
+attack_interval = 1.0
+attack_damage = 1
+gold_reward = 50
+split_spawns = Array[ExtResource("5_split")]([SubResource("EnemySplitSpawn_splitter")])
+move_body_color = Color(0.462745, 0.32549, 0.686275, 1)
+move_accent_color = Color(0.960784, 0.882353, 0.65098, 1)
+attack_body_color = Color(0.913725, 0.47451, 0.294118, 1)
+attack_accent_color = Color(1, 0.878431, 0.686275, 1)
+
+[node name="HealthController" type="Node" parent="."]
+script = ExtResource("2_health")
+max_health = 6
+
+[node name="HealthBar" type="ProgressBar" parent="."]
+custom_minimum_size = Vector2(68, 12)
+layout_mode = 0
+offset_left = 8.0
+offset_top = 0.0
+offset_right = 76.0
+offset_bottom = 12.0
+theme_override_styles/background = SubResource("StyleBoxFlat_enemy_health_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_enemy_health_fill")
+show_percentage = false
+script = ExtResource("3_bar")
+health_controller_path = NodePath("../HealthController")
+animation_duration = 0.08
+
+[node name="Body" type="Panel" parent="."]
+custom_minimum_size = Vector2(54, 54)
+layout_mode = 0
+offset_left = 15.0
+offset_top = 22.0
+offset_right = 69.0
+offset_bottom = 76.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_enemy_body")
+
+[node name="Accent" type="Panel" parent="Body"]
+custom_minimum_size = Vector2(18, 18)
+layout_mode = 0
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 36.0
+offset_bottom = 36.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_enemy_accent")
+
+[node name="HealthLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 82.0
+offset_right = 76.0
+offset_bottom = 100.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+script = ExtResource("4_label")
+health_controller_path = NodePath("../HealthController")
+show_max_health = false
+animation_duration = 0.1

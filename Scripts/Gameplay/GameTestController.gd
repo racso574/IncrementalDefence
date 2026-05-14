@@ -1,9 +1,5 @@
 extends Control
 
-const BASIC_ENEMY_SCENE := preload("res://Scenes/Gameplay/GameTestEnemy.tscn")
-const BRUTE_ENEMY_SCENE := preload("res://Scenes/Gameplay/GameTestEnemyBrute.tscn")
-const RANGED_ENEMY_SCENE := preload("res://Scenes/Gameplay/GameTestEnemyRanged.tscn")
-
 const LIGHTNING_COOLDOWN: float = 2.4
 const LIGHTNING_AREA_RADIUS: float = 96.0
 const LIGHTNING_STRIKE_RADIUS: float = 28.0
@@ -22,22 +18,19 @@ const BLADE_DAMAGE_INTERVAL: float = 0.35
 const BLADE_DAMAGE_PER_HIT: int = 1
 
 @export var starting_gold: int = 250
-@export var enemy_spawn_interval: float = 1.1
 @export var default_player_attack_cooldown: float = 0.5
 @export var default_player_damage: int = 1
-@export var enemy_ring_radius: float = 160.0
-@export var enemy_spawn_margin: float = 90.0
 @export var click_feedback_duration: float = 0.16
 
 @onready var tower_health: HealthController = $TowerAnchor/TowerWrap/TowerBody/HealthController
 @onready var tower_body: Panel = $TowerAnchor/TowerWrap/TowerBody
 @onready var tower_damage_flash: ColorRect = $TowerAnchor/TowerWrap/TowerBody/DamageFlash
+@onready var enemy_wave_spawner: EnemyWaveSpawner = $EnemyWaveSpawner
 @onready var enemy_layer: Control = $EnemyLayer
 @onready var effect_layer: Control = $EffectLayer
 @onready var survived_time_label: Label = $TopRightHud/TimeLabel
 @onready var end_run_button: Button = $BottomRightHud/EndRunButton
 
-var _spawn_timer: float = 0.0
 var _attack_cooldown_remaining: float = 0.0
 var _lightning_cooldown_remaining: float = 0.0
 var _snowball_cooldown_remaining: float = 0.0
@@ -94,7 +87,9 @@ func _ready() -> void:
 	tower_health.damaged.connect(_on_tower_damaged)
 	tower_health.died.connect(_on_tower_died)
 	end_run_button.pressed.connect(_on_end_run_pressed)
-	_spawn_timer = enemy_spawn_interval
+	enemy_wave_spawner.enemy_spawned.connect(_on_enemy_spawned)
+	enemy_wave_spawner.reset_spawner()
+	enemy_wave_spawner.start_spawning()
 	_attack_cooldown_remaining = _player_attack_cooldown
 	_lightning_cooldown_remaining = _lightning_cooldown
 	_snowball_cooldown_remaining = _snowball_cooldown
@@ -109,7 +104,6 @@ func _process(delta: float) -> void:
 	_survived_time_sec += delta
 	_update_survived_time_label()
 
-	_update_spawn(delta)
 	_update_basic_attack(delta)
 	_update_lightning(delta)
 	_update_snowball(delta)
@@ -192,12 +186,6 @@ func _apply_run_state(run_state: Dictionary) -> void:
 	_blade_count_level = int(run_state.get("blade_count_level", 0))
 	_blade_size_level = int(run_state.get("blade_size_level", 0))
 
-func _update_spawn(delta: float) -> void:
-	_spawn_timer -= delta
-	if _spawn_timer <= 0.0:
-		_spawn_timer += enemy_spawn_interval
-		_spawn_enemy()
-
 func _update_basic_attack(delta: float) -> void:
 	_attack_cooldown_remaining = maxf(_attack_cooldown_remaining - delta, 0.0)
 	if _attack_cooldown_remaining <= 0.0:
@@ -278,41 +266,6 @@ func _update_blades(delta: float) -> void:
 				_spawn_blade_hit_feedback(blade_center)
 				_blade_hit_cooldowns[enemy_id] = BLADE_DAMAGE_INTERVAL
 				break
-
-func _spawn_enemy() -> void:
-	var tower_center := _get_tower_center()
-	var viewport_size := get_viewport_rect().size
-	var spawn_center := _pick_spawn_position(viewport_size)
-	var outward_direction := (spawn_center - tower_center).normalized()
-	if outward_direction == Vector2.ZERO:
-		outward_direction = Vector2.UP
-
-	var enemy := _instantiate_enemy_variant()
-	var target_radius := enemy.get_preferred_ring_radius(enemy_ring_radius)
-	var target_center := tower_center + outward_direction * target_radius
-	enemy_layer.add_child(enemy)
-	enemy.setup(tower_health, spawn_center, target_center, effect_layer)
-	enemy.defeated.connect(_on_enemy_defeated)
-
-func _instantiate_enemy_variant() -> GameTestEnemy:
-	var roll: float = randf()
-	var scene: PackedScene = BASIC_ENEMY_SCENE
-	if roll < 0.18:
-		scene = RANGED_ENEMY_SCENE
-	elif roll < 0.43:
-		scene = BRUTE_ENEMY_SCENE
-	return scene.instantiate() as GameTestEnemy
-
-func _pick_spawn_position(viewport_size: Vector2) -> Vector2:
-	match randi() % 4:
-		0:
-			return Vector2(randf_range(0.0, viewport_size.x), -enemy_spawn_margin)
-		1:
-			return Vector2(viewport_size.x + enemy_spawn_margin, randf_range(0.0, viewport_size.y))
-		2:
-			return Vector2(randf_range(0.0, viewport_size.x), viewport_size.y + enemy_spawn_margin)
-		_:
-			return Vector2(-enemy_spawn_margin, randf_range(0.0, viewport_size.y))
 
 func _perform_player_attack() -> void:
 	var mouse_position := get_global_mouse_position()
@@ -601,6 +554,12 @@ func _spawn_blade_hit_feedback(screen_position: Vector2) -> void:
 func _on_enemy_defeated(gold_reward: int) -> void:
 	CurrencySystem.add_currency("gold", gold_reward)
 
+func _on_enemy_spawned(enemy: GameTestEnemy) -> void:
+	if not enemy.defeated.is_connected(_on_enemy_defeated):
+		enemy.defeated.connect(_on_enemy_defeated)
+	if not enemy.child_enemy_spawned.is_connected(_on_enemy_spawned):
+		enemy.child_enemy_spawned.connect(_on_enemy_spawned)
+
 func _on_tower_damaged(_amount: int, _current_health: int, _max_health: int) -> void:
 	_flash_tower_damage()
 
@@ -624,6 +583,7 @@ func _on_end_run_pressed() -> void:
 
 func _go_to_upgrade_menu() -> void:
 	_is_game_over = true
+	enemy_wave_spawner.stop_spawning()
 	TransitionManager.change_scene("UpgradeMenu", "iris_circle", {
 		"data": _build_upgrade_payload()
 	})

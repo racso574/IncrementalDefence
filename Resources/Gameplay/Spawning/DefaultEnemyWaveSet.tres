@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="EnemyWaveSet" format=3 uid="uid://d4jl2mvqike6r"]
+
+[ext_resource type="Script" uid="uid://gqk0fdr3s2td" path="res://Scripts/Gameplay/Spawning/EnemyWaveSet.gd" id="1_wave_set"]
+[ext_resource type="Script" uid="uid://k0rbrmysadr5" path="res://Scripts/Gameplay/Spawning/EnemyWaveDefinition.gd" id="2_wave_def"]
+[ext_resource type="Script" uid="uid://djtv5bqs8qjt1" path="res://Scripts/Gameplay/Spawning/EnemySpawnOption.gd" id="3_spawn_opt"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemySplitter.tscn" id="7_enemy_splitter"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemySummoner.tscn" id="8_enemy_summoner"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemyDasher.tscn" id="9_enemy_dasher"]
+
+[sub_resource type="Resource" id="SpawnOpeningSplitter"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("7_enemy_splitter")
+weight = 2.0
+
+[sub_resource type="Resource" id="SpawnOpeningSummoner"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("8_enemy_summoner")
+weight = 2.0
+
+[sub_resource type="Resource" id="SpawnOpeningDasher"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("9_enemy_dasher")
+weight = 0.5
+
+[sub_resource type="Resource" id="WaveOpening"]
+script = ExtResource("2_wave_def")
+wave_name = "Opening"
+duration_sec = -1.0
+min_alive = 100
+start_spawn_interval = 1.35
+end_spawn_interval = 0.8400000000000001
+spawn_options = Array[ExtResource("3_spawn_opt")]([SubResource("SpawnOpeningSplitter"), SubResource("SpawnOpeningSummoner"), SubResource("SpawnOpeningDasher")])
+
+[resource]
+script = ExtResource("1_wave_set")
+waves = Array[ExtResource("2_wave_def")]([SubResource("WaveOpening")])
