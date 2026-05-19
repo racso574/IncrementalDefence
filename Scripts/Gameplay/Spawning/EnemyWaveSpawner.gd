@@ -2,15 +2,16 @@
 extends Control
 class_name EnemyWaveSpawner
 
+const EnemyTrackerScript = preload("res://Scripts/Gameplay/EnemyTracker.gd")
+const RuntimeScenePoolScript = preload("res://Scripts/Gameplay/Pooling/RuntimeScenePool.gd")
+const RuntimeVisualFactoryScript = preload("res://Scripts/Gameplay/Visuals/RuntimeVisualFactory.gd")
+
 signal enemy_spawned(enemy: GameTestEnemy)
 signal wave_changed(wave_index: int, wave_name: String)
 
-const BASIC_ENEMY_SCENE := preload("res://Scenes/Gameplay/GameTestEnemy.tscn")
-const BRUTE_ENEMY_SCENE := preload("res://Scenes/Gameplay/GameTestEnemyBrute.tscn")
-const RANGED_ENEMY_SCENE := preload("res://Scenes/Gameplay/GameTestEnemyRanged.tscn")
-
 const SPAWN_CHAIN_LEFT := "left"
 const SPAWN_CHAIN_RIGHT := "right"
+const MAX_SPAWN_BATCHES_PER_FRAME: int = 64
 
 @export var enemy_spawn_margin: float = 90.0
 @export var default_ring_radius: float = 160.0
@@ -35,9 +36,14 @@ var waves: Array[EnemyWaveDefinition] = []
 @onready var _enemy_layer: Control = get_node_or_null(enemy_layer_path) as Control
 @onready var _effect_layer: Control = get_node_or_null(effect_layer_path) as Control
 
+var _enemy_tracker: EnemyTrackerScript
+var _scene_pool: RuntimeScenePoolScript
+var _visual_factory: RuntimeVisualFactoryScript
 var _spawn_timer: float = 0.0
 var _current_wave_index: int = 0
 var _current_wave_elapsed: float = 0.0
+var _current_wave_min_alive: int = 0
+var _current_wave_max_alive: int = -1
 var _is_running: bool = false
 var _active_enemies: Dictionary = {}
 
@@ -51,8 +57,6 @@ func _ready() -> void:
 	set_notify_transform(true)
 	_resolve_scene_references()
 	_sync_waves_from_resources()
-	if waves.is_empty():
-		waves = _build_default_waves()
 	reset_spawner()
 	_request_preview_redraw()
 
@@ -73,20 +77,37 @@ func _process(delta: float) -> void:
 	if _spawn_timer > 0.0:
 		return
 
-	var wave: EnemyWaveDefinition = _get_current_wave()
-	if wave == null or not wave.has_spawn_options():
-		_spawn_timer = blocked_retry_interval
-		return
+	var spawn_batches_processed: int = 0
+	while _spawn_timer <= 0.0 and spawn_batches_processed < MAX_SPAWN_BATCHES_PER_FRAME:
+		var wave: EnemyWaveDefinition = _get_current_wave()
+		if wave == null or not wave.has_spawn_options():
+			_spawn_timer = blocked_retry_interval
+			return
 
-	if _is_wave_at_maximum(wave):
-		_spawn_timer = blocked_retry_interval
-		return
+		if _is_global_spawn_capped():
+			_spawn_timer = blocked_retry_interval
+			return
 
-	_spawn_enemy_for_wave(wave)
-	_spawn_timer = _get_next_spawn_interval(wave)
+		if _is_wave_at_maximum(wave):
+			_spawn_timer = blocked_retry_interval
+			return
+
+		_spawn_enemies_for_wave_tick(wave)
+		_spawn_timer += _get_next_spawn_interval(wave)
+		spawn_batches_processed += 1
 
 func start_spawning() -> void:
+	if waves.is_empty():
+		_report_missing_wave_setup()
+		return
 	_is_running = true
+
+func set_runtime_services(enemy_tracker: EnemyTrackerScript, scene_pool: RuntimeScenePoolScript, visual_factory: RuntimeVisualFactoryScript = null) -> void:
+	_enemy_tracker = enemy_tracker
+	_scene_pool = scene_pool
+	_visual_factory = visual_factory
+	_sync_enemy_tracker_wave_cap(_get_current_wave())
+	_prewarm_wave_pool()
 
 func stop_spawning() -> void:
 	_is_running = false
@@ -97,16 +118,27 @@ func reset_spawner() -> void:
 	_current_wave_elapsed = 0.0
 	_spawn_timer = 0.0
 	_active_enemies.clear()
-	if not waves.is_empty():
+	_prewarm_wave_pool()
+	if waves.is_empty():
+		_apply_current_wave_limits(null)
+		_sync_enemy_tracker_wave_cap(null)
+		_report_missing_wave_setup()
+	else:
 		var wave: EnemyWaveDefinition = _get_current_wave()
+		_apply_current_wave_limits(wave)
+		_sync_enemy_tracker_wave_cap(wave)
 		wave_changed.emit(_current_wave_index, wave.wave_name)
 	_request_preview_redraw()
 
 func get_active_enemy_count() -> int:
+	_prune_active_enemies()
 	return _active_enemies.size()
 
 func get_current_wave_index() -> int:
 	return _current_wave_index
+
+func get_current_wave_max_alive() -> int:
+	return _current_wave_max_alive
 
 func _advance_wave_if_needed() -> void:
 	var wave: EnemyWaveDefinition = _get_current_wave()
@@ -124,6 +156,8 @@ func _advance_wave_if_needed() -> void:
 	_current_wave_elapsed = 0.0
 	_spawn_timer = 0.0
 	var next_wave: EnemyWaveDefinition = _get_current_wave()
+	_apply_current_wave_limits(next_wave)
+	_sync_enemy_tracker_wave_cap(next_wave)
 	wave_changed.emit(_current_wave_index, next_wave.wave_name)
 
 func _spawn_enemy_for_wave(wave: EnemyWaveDefinition) -> void:
@@ -135,12 +169,23 @@ func _spawn_enemy_for_wave(wave: EnemyWaveDefinition) -> void:
 	var spawn_center: Vector2 = spawn_context["spawn_center"]
 	var target_center: Vector2 = spawn_context["target_center"]
 
-	_enemy_layer.add_child(enemy)
-	enemy.setup(_tower_health, spawn_center, target_center, _effect_layer)
+	if enemy.get_parent() == null:
+		_enemy_layer.add_child(enemy)
+	enemy.setup(_tower_health, spawn_center, target_center, _effect_layer, _enemy_tracker, _scene_pool, _visual_factory)
 	enemy.set_meta("spawn_context", spawn_context)
 	_active_enemies[enemy.get_instance_id()] = enemy
-	enemy.tree_exited.connect(_on_spawned_enemy_exited.bind(enemy.get_instance_id()))
+	if not enemy.retired.is_connected(_on_spawned_enemy_retired):
+		enemy.retired.connect(_on_spawned_enemy_retired)
 	enemy_spawned.emit(enemy)
+
+func _spawn_enemies_for_wave_tick(wave: EnemyWaveDefinition) -> void:
+	var spawn_count: int = maxi(wave.enemies_per_spawn_tick, 1)
+	for _spawn_index in range(spawn_count):
+		if _is_global_spawn_capped():
+			return
+		if _is_wave_at_maximum(wave):
+			return
+		_spawn_enemy_for_wave(wave)
 
 func _instantiate_wave_enemy(wave: EnemyWaveDefinition) -> GameTestEnemy:
 	var total_weight: float = 0.0
@@ -158,17 +203,24 @@ func _instantiate_wave_enemy(wave: EnemyWaveDefinition) -> GameTestEnemy:
 			continue
 		cursor += option.weight
 		if roll <= cursor:
-			return option.enemy_scene.instantiate() as GameTestEnemy
+			return _acquire_enemy_from_scene(option.enemy_scene)
 
 	for index in range(wave.spawn_options.size() - 1, -1, -1):
 		var fallback_option: EnemySpawnOption = wave.spawn_options[index]
 		if fallback_option != null and fallback_option.enemy_scene != null and fallback_option.weight > 0.0:
-			return fallback_option.enemy_scene.instantiate() as GameTestEnemy
+			return _acquire_enemy_from_scene(fallback_option.enemy_scene)
 	return null
+
+func _acquire_enemy_from_scene(enemy_scene: PackedScene) -> GameTestEnemy:
+	if enemy_scene == null:
+		return null
+	if _scene_pool != null:
+		return _scene_pool.acquire_scene(enemy_scene, _enemy_layer) as GameTestEnemy
+	return enemy_scene.instantiate() as GameTestEnemy
 
 func _get_next_spawn_interval(wave: EnemyWaveDefinition) -> float:
 	var progress_ratio: float = _get_wave_progress_ratio(wave)
-	var below_minimum: bool = _active_enemies.size() < wave.min_alive
+	var below_minimum: bool = _get_wave_live_enemy_count() < _current_wave_min_alive
 	return wave.get_spawn_interval(progress_ratio, below_minimum)
 
 func _get_wave_progress_ratio(wave: EnemyWaveDefinition) -> float:
@@ -177,7 +229,12 @@ func _get_wave_progress_ratio(wave: EnemyWaveDefinition) -> float:
 	return clampf(_current_wave_elapsed / wave.duration_sec, 0.0, 1.0)
 
 func _is_wave_at_maximum(wave: EnemyWaveDefinition) -> bool:
-	return wave.max_alive >= 0 and _active_enemies.size() >= wave.max_alive
+	if _current_wave_max_alive < 0:
+		return false
+	return _get_wave_live_enemy_count() >= _current_wave_max_alive
+
+func _is_global_spawn_capped() -> bool:
+	return _enemy_tracker != null and _enemy_tracker.is_at_capacity()
 
 func _get_current_wave() -> EnemyWaveDefinition:
 	if waves.is_empty():
@@ -348,102 +405,76 @@ func _get_tower_center() -> Vector2:
 	var tower_rect: Rect2 = _tower_body.get_global_rect()
 	return tower_rect.position + tower_rect.size * 0.5
 
-func _on_spawned_enemy_exited(enemy_id: int) -> void:
-	_active_enemies.erase(enemy_id)
+func _on_spawned_enemy_retired(enemy: GameTestEnemy) -> void:
+	if enemy == null:
+		return
+	_active_enemies.erase(enemy.get_instance_id())
 
-func _build_default_waves() -> Array[EnemyWaveDefinition]:
-	var normal: EnemySpawnOption = EnemySpawnOption.new()
-	normal.enemy_scene = BASIC_ENEMY_SCENE
-	normal.weight = 1.0
+func _sync_enemy_tracker_wave_cap(wave: EnemyWaveDefinition) -> void:
+	if _enemy_tracker == null:
+		return
+	if wave == null:
+		_enemy_tracker.wave_active_enemy_cap = -1
+		return
+	_enemy_tracker.wave_active_enemy_cap = _current_wave_max_alive
 
-	var brute: EnemySpawnOption = EnemySpawnOption.new()
-	brute.enemy_scene = BRUTE_ENEMY_SCENE
-	brute.weight = 1.0
+func _apply_current_wave_limits(wave: EnemyWaveDefinition) -> void:
+	if wave == null:
+		_current_wave_min_alive = 0
+		_current_wave_max_alive = -1
+		return
+	_current_wave_min_alive = wave.min_alive
+	_current_wave_max_alive = wave.max_alive
 
-	var ranged: EnemySpawnOption = EnemySpawnOption.new()
-	ranged.enemy_scene = RANGED_ENEMY_SCENE
-	ranged.weight = 1.0
+func _get_wave_live_enemy_count() -> int:
+	if _enemy_tracker != null:
+		return _enemy_tracker.get_live_enemy_count()
+	return get_active_enemy_count()
 
-	var result: Array[EnemyWaveDefinition] = []
-
-	var wave_1: EnemyWaveDefinition = EnemyWaveDefinition.new()
-	wave_1.wave_name = "Opening"
-	wave_1.duration_sec = 24.0
-	wave_1.min_alive = 2
-	wave_1.max_alive = 5
-	wave_1.start_spawn_interval = 1.35
-	wave_1.end_spawn_interval = 1.10
-	wave_1.catchup_interval_multiplier = 0.45
-	wave_1.spawn_options = [normal]
-	result.append(wave_1)
-
-	var wave_2: EnemyWaveDefinition = EnemyWaveDefinition.new()
-	wave_2.wave_name = "Pressure"
-	wave_2.duration_sec = 26.0
-	wave_2.min_alive = 3
-	wave_2.max_alive = 7
-	wave_2.start_spawn_interval = 1.20
-	wave_2.end_spawn_interval = 0.95
-	wave_2.catchup_interval_multiplier = 0.42
-	wave_2.spawn_options = [_clone_spawn_option(normal, 0.8), _clone_spawn_option(brute, 0.2)]
-	result.append(wave_2)
-
-	var wave_3: EnemyWaveDefinition = EnemyWaveDefinition.new()
-	wave_3.wave_name = "Mix"
-	wave_3.duration_sec = 30.0
-	wave_3.min_alive = 4
-	wave_3.max_alive = 9
-	wave_3.start_spawn_interval = 1.05
-	wave_3.end_spawn_interval = 0.82
-	wave_3.catchup_interval_multiplier = 0.38
-	wave_3.spawn_options = [
-		_clone_spawn_option(normal, 0.58),
-		_clone_spawn_option(brute, 0.24),
-		_clone_spawn_option(ranged, 0.18)
-	]
-	result.append(wave_3)
-
-	var wave_4: EnemyWaveDefinition = EnemyWaveDefinition.new()
-	wave_4.wave_name = "Swarm"
-	wave_4.duration_sec = 34.0
-	wave_4.min_alive = 5
-	wave_4.max_alive = 12
-	wave_4.start_spawn_interval = 0.92
-	wave_4.end_spawn_interval = 0.66
-	wave_4.catchup_interval_multiplier = 0.34
-	wave_4.spawn_options = [
-		_clone_spawn_option(normal, 0.44),
-		_clone_spawn_option(brute, 0.24),
-		_clone_spawn_option(ranged, 0.32)
-	]
-	result.append(wave_4)
-
-	var wave_5: EnemyWaveDefinition = EnemyWaveDefinition.new()
-	wave_5.wave_name = "Endless"
-	wave_5.duration_sec = -1.0
-	wave_5.min_alive = 6
-	wave_5.max_alive = -1
-	wave_5.start_spawn_interval = 0.72
-	wave_5.end_spawn_interval = 0.46
-	wave_5.catchup_interval_multiplier = 0.30
-	wave_5.spawn_options = [
-		_clone_spawn_option(normal, 0.38),
-		_clone_spawn_option(brute, 0.24),
-		_clone_spawn_option(ranged, 0.38)
-	]
-	result.append(wave_5)
-
-	return result
-
-func _clone_spawn_option(source: EnemySpawnOption, weight: float) -> EnemySpawnOption:
-	var option: EnemySpawnOption = EnemySpawnOption.new()
-	option.enemy_scene = source.enemy_scene
-	option.weight = weight
-	return option
+func _prune_active_enemies() -> void:
+	var stale_ids: Array[int] = []
+	for enemy_id_ref in _active_enemies.keys():
+		var enemy_id: int = int(enemy_id_ref)
+		var enemy_ref: Variant = _active_enemies[enemy_id]
+		if enemy_ref == null or not is_instance_valid(enemy_ref):
+			stale_ids.append(enemy_id)
+			continue
+		var enemy: GameTestEnemy = enemy_ref as GameTestEnemy
+		if enemy == null or enemy.is_defeated():
+			stale_ids.append(enemy_id)
+	for enemy_id in stale_ids:
+		_active_enemies.erase(enemy_id)
 
 func _sync_waves_from_resources() -> void:
 	if wave_set != null and not wave_set.waves.is_empty():
 		waves = wave_set.waves.duplicate()
+	else:
+		waves.clear()
+
+func _report_missing_wave_setup() -> void:
+	if wave_set == null:
+		push_error("EnemyWaveSpawner requiere un wave_set asignado. No se usaran waves por defecto.")
+		return
+	push_error("EnemyWaveSpawner requiere que el wave_set tenga al menos una wave valida.")
+
+func _prewarm_wave_pool() -> void:
+	if _scene_pool == null or waves.is_empty():
+		return
+
+	var required_scenes: Dictionary = {}
+	for wave in waves:
+		if wave == null:
+			continue
+		for option in wave.spawn_options:
+			if option == null or option.enemy_scene == null:
+				continue
+			required_scenes[option.enemy_scene.resource_path] = option.enemy_scene
+
+	for enemy_scene_ref in required_scenes.values():
+		var enemy_scene: PackedScene = enemy_scene_ref as PackedScene
+		if enemy_scene == null:
+			continue
+		_scene_pool.prewarm_scene(enemy_scene, _scene_pool.prewarm_per_scene)
 
 func _draw() -> void:
 	if not Engine.is_editor_hint() or not show_editor_preview:

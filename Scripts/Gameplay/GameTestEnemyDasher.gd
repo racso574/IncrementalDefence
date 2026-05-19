@@ -20,6 +20,26 @@ var _completed_dash_count: int = 0
 var _dash_cooldown_remaining: float = 0.0
 var _cling_target_enemy: GameTestEnemy
 
+func setup(
+	tower_health: HealthController,
+	spawn_center: Vector2,
+	target_center: Vector2,
+	effect_host: Control = null,
+	enemy_tracker: EnemyTrackerScript = null,
+	scene_pool: RuntimeScenePoolScript = null,
+	visual_factory: RuntimeVisualFactoryScript = null
+) -> void:
+	super.setup(tower_health, spawn_center, target_center, effect_host, enemy_tracker, scene_pool, visual_factory)
+	_is_dashing_to_enemy = false
+	_is_charging_tower = false
+	_is_dashing_to_tower = false
+	_tower_charge_remaining = 0.0
+	_dash_target_enemy = null
+	_dashed_enemy_ids.clear()
+	_completed_dash_count = 0
+	_dash_cooldown_remaining = 0.0
+	_cling_target_enemy = null
+
 func _process(delta: float) -> void:
 	if _state == State.DEAD:
 		return
@@ -73,15 +93,21 @@ func _process(delta: float) -> void:
 		_begin_tower_charge()
 
 func _find_dash_target(current_center: Vector2, tower_distance: float) -> GameTestEnemy:
-	var parent_node := get_parent()
-	if parent_node == null:
-		return null
-
 	var nearest_enemy: GameTestEnemy
 	var nearest_distance: float = INF
+	var candidates: Array[GameTestEnemy] = []
+	if _enemy_tracker != null:
+		candidates = _enemy_tracker.get_live_enemies()
+	if candidates.is_empty():
+		var parent_node := get_parent()
+		if parent_node == null:
+			return null
+		for child in parent_node.get_children():
+			var fallback_enemy := child as GameTestEnemy
+			if fallback_enemy != null:
+				candidates.append(fallback_enemy)
 
-	for child in parent_node.get_children():
-		var enemy := child as GameTestEnemy
+	for enemy in candidates:
 		if enemy == null or enemy == self:
 			continue
 		if enemy._state == State.DEAD:
@@ -161,56 +187,80 @@ func _update_tower_dash(delta: float) -> void:
 		_explode()
 
 func _spawn_charge_feedback() -> void:
-	var effect_parent: Control = _effect_host if _effect_host != null else get_parent() as Control
+	var effect_parent: Control = _get_effect_parent()
 	if effect_parent == null:
 		return
 
-	var pulse := Panel.new()
-	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pulse.size = Vector2(32.0, 32.0)
-	pulse.pivot_offset = pulse.size * 0.5
+	var visual_factory: RuntimeVisualFactoryScript = _get_visual_factory()
+	var pulse: Panel
+	if visual_factory != null:
+		pulse = visual_factory.acquire_circle_panel(
+			"enemy_dasher_charge_pulse",
+			16.0,
+			Color(1.0, 0.56, 0.28, 0.18),
+			Color(1.0, 0.86, 0.56, 0.92),
+			2,
+			effect_parent
+		)
+	else:
+		pulse = Panel.new()
+		pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pulse.size = Vector2(32.0, 32.0)
+		pulse.pivot_offset = pulse.size * 0.5
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(1.0, 0.56, 0.28, 0.18)
+		style.border_width_left = 2
+		style.border_width_top = 2
+		style.border_width_right = 2
+		style.border_width_bottom = 2
+		style.border_color = Color(1.0, 0.86, 0.56, 0.92)
+		style.corner_radius_top_left = 48
+		style.corner_radius_top_right = 48
+		style.corner_radius_bottom_right = 48
+		style.corner_radius_bottom_left = 48
+		pulse.add_theme_stylebox_override("panel", style)
+		effect_parent.add_child(pulse)
 	pulse.global_position = _get_center_position() - pulse.size * 0.5
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(1.0, 0.56, 0.28, 0.18)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(1.0, 0.86, 0.56, 0.92)
-	style.corner_radius_top_left = 48
-	style.corner_radius_top_right = 48
-	style.corner_radius_bottom_right = 48
-	style.corner_radius_bottom_left = 48
-	pulse.add_theme_stylebox_override("panel", style)
-	effect_parent.add_child(pulse)
-
-	var tween := pulse.create_tween()
+	var tween := _create_visual_tween()
 	tween.parallel().tween_property(pulse, "scale", Vector2(1.7, 1.7), 0.28)
 	tween.parallel().tween_property(pulse, "modulate:a", 0.0, 0.28)
-	tween.tween_callback(Callable(pulse, "queue_free"))
+	tween.tween_callback(Callable(self, "_release_visual_node").bind(pulse))
+	_register_visual_tween(pulse, tween)
 
 func _spawn_dash_hit_feedback(center: Vector2) -> void:
-	var effect_parent: Control = _effect_host if _effect_host != null else get_parent() as Control
+	var effect_parent: Control = _get_effect_parent()
 	if effect_parent == null:
 		return
 
-	var spark := Panel.new()
-	spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	spark.size = Vector2(18.0, 18.0)
-	spark.pivot_offset = spark.size * 0.5
+	var visual_factory: RuntimeVisualFactoryScript = _get_visual_factory()
+	var spark: Panel
+	if visual_factory != null:
+		spark = visual_factory.acquire_circle_panel(
+			"enemy_dasher_hit_spark",
+			9.0,
+			Color(1.0, 0.82, 0.58, 0.84),
+			Color.TRANSPARENT,
+			0,
+			effect_parent
+		)
+	else:
+		spark = Panel.new()
+		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		spark.size = Vector2(18.0, 18.0)
+		spark.pivot_offset = spark.size * 0.5
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(1.0, 0.82, 0.58, 0.84)
+		style.corner_radius_top_left = 20
+		style.corner_radius_top_right = 20
+		style.corner_radius_bottom_right = 20
+		style.corner_radius_bottom_left = 20
+		spark.add_theme_stylebox_override("panel", style)
+		effect_parent.add_child(spark)
 	spark.global_position = center - spark.size * 0.5
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(1.0, 0.82, 0.58, 0.84)
-	style.corner_radius_top_left = 20
-	style.corner_radius_top_right = 20
-	style.corner_radius_bottom_right = 20
-	style.corner_radius_bottom_left = 20
-	spark.add_theme_stylebox_override("panel", style)
-	effect_parent.add_child(spark)
-
-	var tween := spark.create_tween()
+	var tween := _create_visual_tween()
 	tween.parallel().tween_property(spark, "scale", Vector2(1.4, 1.4), 0.16)
 	tween.parallel().tween_property(spark, "modulate:a", 0.0, 0.16)
-	tween.tween_callback(Callable(spark, "queue_free"))
+	tween.tween_callback(Callable(self, "_release_visual_node").bind(spark))
+	_register_visual_tween(spark, tween)

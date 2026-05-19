@@ -1,8 +1,13 @@
 extends Control
 class_name GameTestEnemy
 
+const EnemyTrackerScript = preload("res://Scripts/Gameplay/EnemyTracker.gd")
+const RuntimeScenePoolScript = preload("res://Scripts/Gameplay/Pooling/RuntimeScenePool.gd")
+const RuntimeVisualFactoryScript = preload("res://Scripts/Gameplay/Visuals/RuntimeVisualFactory.gd")
+
 signal defeated(gold_reward: int)
 signal child_enemy_spawned(enemy: GameTestEnemy)
+signal retired(enemy: GameTestEnemy)
 
 enum State { MOVING, ATTACKING, DEAD }
 enum AttackMode { CONTACT, RANGED, HEAL_AURA, SUMMON }
@@ -43,31 +48,69 @@ var _target_center: Vector2 = Vector2.ZERO
 var _state: State = State.MOVING
 var _attack_timer: float = 0.0
 var _effect_host: Control
+var _enemy_tracker: EnemyTrackerScript
+var _scene_pool: RuntimeScenePoolScript
+var _visual_factory: RuntimeVisualFactoryScript
 var _slow_multiplier: float = 1.0
 var _slow_timer: float = 0.0
 var _spawn_center: Vector2 = Vector2.ZERO
 var _path_total_distance: float = 0.0
 var _path_progress: float = 0.0
 var _sine_sign: float = 1.0
+var _base_attack_damage: int = 0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_base_attack_damage = attack_damage
 	health_controller.died.connect(_on_died)
 	_apply_state_visual()
 
-func setup(tower_health: HealthController, spawn_center: Vector2, target_center: Vector2, effect_host: Control = null) -> void:
+func setup(
+	tower_health: HealthController,
+	spawn_center: Vector2,
+	target_center: Vector2,
+	effect_host: Control = null,
+	enemy_tracker: EnemyTrackerScript = null,
+	scene_pool: RuntimeScenePoolScript = null,
+	visual_factory: RuntimeVisualFactoryScript = null
+) -> void:
 	_tower_health = tower_health
+	_enemy_tracker = enemy_tracker
+	_scene_pool = scene_pool
+	_visual_factory = visual_factory
 	_tower_center = _resolve_tower_center()
 	_spawn_center = spawn_center
 	_target_center = target_center
 	_effect_host = effect_host
+	health_controller.reset_health()
 	_path_total_distance = maxf(spawn_center.distance_to(target_center), 0.001)
 	_path_progress = 0.0
 	_sine_sign = -1.0 if randf() < 0.5 else 1.0
+	attack_damage = _base_attack_damage
+	_slow_multiplier = 1.0
+	_slow_timer = 0.0
+	modulate = Color.WHITE
 	_set_center_position(spawn_center)
 	_state = State.MOVING
 	_attack_timer = 0.0
+	process_mode = Node.PROCESS_MODE_INHERIT
+	visible = true
 	_apply_state_visual()
+	if _enemy_tracker != null:
+		_enemy_tracker.register_enemy(self)
+
+func on_acquired_from_pool() -> void:
+	process_mode = Node.PROCESS_MODE_INHERIT
+	visible = true
+
+func on_released_to_pool() -> void:
+	process_mode = Node.PROCESS_MODE_DISABLED
+	visible = false
+	_state = State.DEAD
+	_tower_health = null
+	_effect_host = null
+	_enemy_tracker = null
+	_scene_pool = null
 
 func _process(delta: float) -> void:
 	if _slow_timer > 0.0:
@@ -108,6 +151,19 @@ func receive_player_damage(amount: int) -> void:
 		return
 	health_controller.apply_damage(amount)
 
+func is_defeated() -> bool:
+	return _state == State.DEAD
+
+func eliminate(grant_reward: bool = true, allow_split_children: bool = true) -> void:
+	if _state == State.DEAD:
+		return
+
+	_state = State.DEAD
+	if allow_split_children:
+		_spawn_split_children()
+	defeated.emit(gold_reward if grant_reward else 0)
+	_retire()
+
 func _on_died() -> void:
 	if _state == State.DEAD:
 		return
@@ -115,7 +171,7 @@ func _on_died() -> void:
 	_state = State.DEAD
 	_spawn_split_children()
 	defeated.emit(gold_reward)
-	queue_free()
+	_retire()
 
 func get_preferred_ring_radius(default_radius: float) -> float:
 	if preferred_ring_radius > 0.0:
@@ -156,25 +212,34 @@ func _launch_projectile() -> void:
 	if _tower_health == null:
 		return
 
-	var projectile_host: Control = _effect_host if _effect_host != null else get_parent() as Control
+	var projectile_host: Control = _get_effect_parent()
 	if projectile_host == null:
 		_tower_health.apply_damage(attack_damage)
 		return
 
-	var projectile := Panel.new()
-	projectile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	projectile.size = Vector2(projectile_size, projectile_size)
-	projectile.pivot_offset = projectile.size * 0.5
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = projectile_color
-	style.corner_radius_top_left = 32
-	style.corner_radius_top_right = 32
-	style.corner_radius_bottom_right = 32
-	style.corner_radius_bottom_left = 32
-	projectile.add_theme_stylebox_override("panel", style)
-
-	projectile_host.add_child(projectile)
+	var projectile: Panel
+	if _visual_factory != null:
+		projectile = _visual_factory.acquire_circle_panel(
+			"enemy_ranged_projectile",
+			projectile_size * 0.5,
+			projectile_color,
+			Color.TRANSPARENT,
+			0,
+			projectile_host
+		)
+	else:
+		projectile = Panel.new()
+		projectile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		projectile.size = Vector2(projectile_size, projectile_size)
+		projectile.pivot_offset = projectile.size * 0.5
+		var style := StyleBoxFlat.new()
+		style.bg_color = projectile_color
+		style.corner_radius_top_left = 32
+		style.corner_radius_top_right = 32
+		style.corner_radius_bottom_right = 32
+		style.corner_radius_bottom_left = 32
+		projectile.add_theme_stylebox_override("panel", style)
+		projectile_host.add_child(projectile)
 	projectile.global_position = _get_center_position() - projectile.size * 0.5
 
 	var tower_body := _tower_health.get_parent() as Control
@@ -183,14 +248,14 @@ func _launch_projectile() -> void:
 		target_center = tower_body.get_global_rect().position + tower_body.size * 0.5
 	var tower_health_ref := _tower_health
 	var damage_amount := attack_damage
-	var tween := projectile.create_tween()
+	var tween := _create_visual_tween()
 	tween.tween_property(projectile, "global_position", target_center - projectile.size * 0.5, projectile_travel_duration)
 	tween.finished.connect(func() -> void:
 		if tower_health_ref != null and tower_health_ref.is_alive():
 			tower_health_ref.apply_damage(damage_amount)
-		if is_instance_valid(projectile):
-			projectile.queue_free()
+		_release_visual_node(projectile)
 	)
+	_register_visual_tween(projectile, tween)
 
 func _apply_state_visual() -> void:
 	match _state:
@@ -231,39 +296,59 @@ func _explode() -> void:
 	if _tower_health != null and _tower_health.is_alive():
 		_tower_health.apply_damage(attack_damage)
 	defeated.emit(gold_reward)
-	queue_free()
+	_retire()
+
+func _retire() -> void:
+	if _enemy_tracker != null:
+		_enemy_tracker.unregister_enemy(self)
+	retired.emit(self)
+	if _scene_pool != null:
+		_scene_pool.release(self)
+	else:
+		queue_free()
 
 func _spawn_explosion_feedback() -> void:
-	var effect_parent: Control = _effect_host if _effect_host != null else get_parent() as Control
+	var effect_parent: Control = _get_effect_parent()
 	if effect_parent == null:
 		return
 
-	var burst := Panel.new()
-	burst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	burst.size = Vector2(explosion_radius * 2.0, explosion_radius * 2.0)
-	burst.pivot_offset = burst.size * 0.5
+	var burst: Panel
+	if _visual_factory != null:
+		burst = _visual_factory.acquire_circle_panel(
+			"enemy_explosion_burst",
+			explosion_radius,
+			Color(1.0, 0.58, 0.22, 0.24),
+			Color(1.0, 0.84, 0.44, 0.95),
+			3,
+			effect_parent
+		)
+	else:
+		burst = Panel.new()
+		burst.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		burst.size = Vector2(explosion_radius * 2.0, explosion_radius * 2.0)
+		burst.pivot_offset = burst.size * 0.5
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(1.0, 0.58, 0.22, 0.24)
+		style.border_width_left = 3
+		style.border_width_top = 3
+		style.border_width_right = 3
+		style.border_width_bottom = 3
+		style.border_color = Color(1.0, 0.84, 0.44, 0.95)
+		style.corner_radius_top_left = 96
+		style.corner_radius_top_right = 96
+		style.corner_radius_bottom_right = 96
+		style.corner_radius_bottom_left = 96
+		burst.add_theme_stylebox_override("panel", style)
+		effect_parent.add_child(burst)
 	burst.global_position = _target_center - burst.size * 0.5
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(1.0, 0.58, 0.22, 0.24)
-	style.border_width_left = 3
-	style.border_width_top = 3
-	style.border_width_right = 3
-	style.border_width_bottom = 3
-	style.border_color = Color(1.0, 0.84, 0.44, 0.95)
-	style.corner_radius_top_left = 96
-	style.corner_radius_top_right = 96
-	style.corner_radius_bottom_right = 96
-	style.corner_radius_bottom_left = 96
-	burst.add_theme_stylebox_override("panel", style)
-	effect_parent.add_child(burst)
-
-	var tween := burst.create_tween()
+	var tween := _create_visual_tween()
 	tween.parallel().tween_property(burst, "scale", Vector2(1.58, 1.58), 0.14)
 	tween.tween_interval(0.10)
 	tween.parallel().tween_property(burst, "scale", Vector2(1.82, 1.82), 0.24)
 	tween.parallel().tween_property(burst, "modulate:a", 0.0, 0.24)
-	tween.tween_callback(Callable(burst, "queue_free"))
+	tween.tween_callback(Callable(self, "_release_visual_node").bind(burst))
+	_register_visual_tween(burst, tween)
 
 func _emit_heal_aura() -> void:
 	var allies := _get_healable_allies()
@@ -276,13 +361,20 @@ func _emit_heal_aura() -> void:
 
 func _get_healable_allies() -> Array[GameTestEnemy]:
 	var allies: Array[GameTestEnemy] = []
-	var parent_node := get_parent()
-	if parent_node == null:
-		return allies
-
 	var center := _get_center_position()
-	for child in parent_node.get_children():
-		var ally := child as GameTestEnemy
+	var candidates: Array[GameTestEnemy] = []
+	if _enemy_tracker != null:
+		candidates = _enemy_tracker.get_live_enemies()
+	if candidates.is_empty():
+		var parent_node := get_parent()
+		if parent_node == null:
+			return allies
+		for child in parent_node.get_children():
+			var fallback_ally := child as GameTestEnemy
+			if fallback_ally != null:
+				candidates.append(fallback_ally)
+
+	for ally in candidates:
 		if ally == null or ally == self:
 			continue
 		if ally._state == State.DEAD:
@@ -295,59 +387,81 @@ func _get_healable_allies() -> Array[GameTestEnemy]:
 	return allies
 
 func _spawn_heal_pulse() -> void:
-	var effect_parent: Control = _effect_host if _effect_host != null else get_parent() as Control
+	var effect_parent: Control = _get_effect_parent()
 	if effect_parent == null:
 		return
 
-	var pulse := Panel.new()
-	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pulse.size = Vector2(heal_radius * 2.0, heal_radius * 2.0)
-	pulse.pivot_offset = pulse.size * 0.5
+	var pulse: Panel
+	if _visual_factory != null:
+		pulse = _visual_factory.acquire_circle_panel(
+			"enemy_heal_pulse",
+			heal_radius,
+			Color(0.42, 0.93, 0.58, 0.12),
+			Color(0.64, 1.0, 0.74, 0.88),
+			2,
+			effect_parent
+		)
+	else:
+		pulse = Panel.new()
+		pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pulse.size = Vector2(heal_radius * 2.0, heal_radius * 2.0)
+		pulse.pivot_offset = pulse.size * 0.5
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.42, 0.93, 0.58, 0.12)
+		style.border_width_left = 2
+		style.border_width_top = 2
+		style.border_width_right = 2
+		style.border_width_bottom = 2
+		style.border_color = Color(0.64, 1.0, 0.74, 0.88)
+		style.corner_radius_top_left = 128
+		style.corner_radius_top_right = 128
+		style.corner_radius_bottom_right = 128
+		style.corner_radius_bottom_left = 128
+		pulse.add_theme_stylebox_override("panel", style)
+		effect_parent.add_child(pulse)
 	pulse.global_position = _get_center_position() - pulse.size * 0.5
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.42, 0.93, 0.58, 0.12)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.64, 1.0, 0.74, 0.88)
-	style.corner_radius_top_left = 128
-	style.corner_radius_top_right = 128
-	style.corner_radius_bottom_right = 128
-	style.corner_radius_bottom_left = 128
-	pulse.add_theme_stylebox_override("panel", style)
-	effect_parent.add_child(pulse)
-
-	var tween := pulse.create_tween()
+	var tween := _create_visual_tween()
 	tween.parallel().tween_property(pulse, "scale", Vector2(1.12, 1.12), 0.20)
 	tween.parallel().tween_property(pulse, "modulate:a", 0.0, 0.20)
-	tween.tween_callback(Callable(pulse, "queue_free"))
+	tween.tween_callback(Callable(self, "_release_visual_node").bind(pulse))
+	_register_visual_tween(pulse, tween)
 
 func _spawn_heal_target_feedback(target_center: Vector2) -> void:
-	var effect_parent: Control = _effect_host if _effect_host != null else get_parent() as Control
+	var effect_parent: Control = _get_effect_parent()
 	if effect_parent == null:
 		return
 
-	var spark := Panel.new()
-	spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	spark.size = Vector2(16.0, 16.0)
-	spark.pivot_offset = spark.size * 0.5
+	var spark: Panel
+	if _visual_factory != null:
+		spark = _visual_factory.acquire_circle_panel(
+			"enemy_heal_target",
+			8.0,
+			Color(0.78, 1.0, 0.82, 0.86),
+			Color.TRANSPARENT,
+			0,
+			effect_parent
+		)
+	else:
+		spark = Panel.new()
+		spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		spark.size = Vector2(16.0, 16.0)
+		spark.pivot_offset = spark.size * 0.5
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.78, 1.0, 0.82, 0.86)
+		style.corner_radius_top_left = 20
+		style.corner_radius_top_right = 20
+		style.corner_radius_bottom_right = 20
+		style.corner_radius_bottom_left = 20
+		spark.add_theme_stylebox_override("panel", style)
+		effect_parent.add_child(spark)
 	spark.global_position = target_center - spark.size * 0.5
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.78, 1.0, 0.82, 0.86)
-	style.corner_radius_top_left = 20
-	style.corner_radius_top_right = 20
-	style.corner_radius_bottom_right = 20
-	style.corner_radius_bottom_left = 20
-	spark.add_theme_stylebox_override("panel", style)
-	effect_parent.add_child(spark)
-
-	var tween := spark.create_tween()
+	var tween := _create_visual_tween()
 	tween.parallel().tween_property(spark, "scale", Vector2(1.45, 1.45), 0.18)
 	tween.parallel().tween_property(spark, "modulate:a", 0.0, 0.18)
-	tween.tween_callback(Callable(spark, "queue_free"))
+	tween.tween_callback(Callable(self, "_release_visual_node").bind(spark))
+	_register_visual_tween(spark, tween)
 
 func _emit_summon() -> void:
 	if summon_spawns.is_empty():
@@ -421,8 +535,14 @@ func _spawn_child_enemy(enemy_scene: PackedScene, spawn_center: Vector2, directi
 	var parent_node := get_parent() as Control
 	if parent_node == null or _tower_health == null or enemy_scene == null:
 		return null
+	if _enemy_tracker != null and not _enemy_tracker.can_spawn_more():
+		return null
 
-	var child_enemy := enemy_scene.instantiate() as GameTestEnemy
+	var child_enemy: GameTestEnemy
+	if _scene_pool != null:
+		child_enemy = _scene_pool.acquire_scene(enemy_scene, parent_node) as GameTestEnemy
+	else:
+		child_enemy = enemy_scene.instantiate() as GameTestEnemy
 	if child_enemy == null:
 		return null
 
@@ -435,8 +555,9 @@ func _spawn_child_enemy(enemy_scene: PackedScene, spawn_center: Vector2, directi
 	var child_target_radius := child_enemy.get_preferred_ring_radius(_target_center.distance_to(_tower_center))
 	var child_target_center := _tower_center + child_direction * child_target_radius
 
-	parent_node.add_child(child_enemy)
-	child_enemy.setup(_tower_health, spawn_center, child_target_center, _effect_host)
+	if child_enemy.get_parent() == null:
+		parent_node.add_child(child_enemy)
+	child_enemy.setup(_tower_health, spawn_center, child_target_center, _effect_host, _enemy_tracker, _scene_pool, _visual_factory)
 	child_enemy_spawned.emit(child_enemy)
 	return child_enemy
 
@@ -447,32 +568,66 @@ func _get_pattern_child_angle(base_angle: float, angle_offset_degrees: float, ar
 		final_offset_deg += lerpf(-arc_degrees * 0.5, arc_degrees * 0.5, spread_progress)
 	return base_angle + deg_to_rad(final_offset_deg)
 
+func _get_effect_parent() -> Control:
+	return _effect_host if _effect_host != null else get_parent() as Control
+
+func _get_visual_factory() -> RuntimeVisualFactoryScript:
+	return _visual_factory
+
+func _register_visual_tween(node: Node, tween: Tween) -> void:
+	if _visual_factory != null:
+		_visual_factory.register_tween(node, tween)
+
+func _create_visual_tween() -> Tween:
+	if _visual_factory != null:
+		return _visual_factory.create_runtime_tween()
+	return create_tween()
+
+func _release_visual_node(node: Node) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	if _visual_factory != null:
+		_visual_factory.release_node(node)
+	else:
+		node.queue_free()
+
 func _spawn_summon_feedback(center: Vector2) -> void:
-	var effect_parent: Control = _effect_host if _effect_host != null else get_parent() as Control
+	var effect_parent: Control = _get_effect_parent()
 	if effect_parent == null:
 		return
 
-	var pulse := Panel.new()
-	pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pulse.size = Vector2(42.0, 42.0)
-	pulse.pivot_offset = pulse.size * 0.5
+	var pulse: Panel
+	if _visual_factory != null:
+		pulse = _visual_factory.acquire_circle_panel(
+			"enemy_summon_pulse",
+			21.0,
+			Color(0.72, 0.72, 0.82, 0.16),
+			Color(0.88, 0.88, 0.98, 0.88),
+			2,
+			effect_parent
+		)
+	else:
+		pulse = Panel.new()
+		pulse.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pulse.size = Vector2(42.0, 42.0)
+		pulse.pivot_offset = pulse.size * 0.5
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.72, 0.72, 0.82, 0.16)
+		style.border_width_left = 2
+		style.border_width_top = 2
+		style.border_width_right = 2
+		style.border_width_bottom = 2
+		style.border_color = Color(0.88, 0.88, 0.98, 0.88)
+		style.corner_radius_top_left = 48
+		style.corner_radius_top_right = 48
+		style.corner_radius_bottom_right = 48
+		style.corner_radius_bottom_left = 48
+		pulse.add_theme_stylebox_override("panel", style)
+		effect_parent.add_child(pulse)
 	pulse.global_position = center - pulse.size * 0.5
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.72, 0.72, 0.82, 0.16)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.88, 0.88, 0.98, 0.88)
-	style.corner_radius_top_left = 48
-	style.corner_radius_top_right = 48
-	style.corner_radius_bottom_right = 48
-	style.corner_radius_bottom_left = 48
-	pulse.add_theme_stylebox_override("panel", style)
-	effect_parent.add_child(pulse)
-
-	var tween := pulse.create_tween()
+	var tween := _create_visual_tween()
 	tween.parallel().tween_property(pulse, "scale", Vector2(1.45, 1.45), 0.22)
 	tween.parallel().tween_property(pulse, "modulate:a", 0.0, 0.22)
-	tween.tween_callback(Callable(pulse, "queue_free"))
+	tween.tween_callback(Callable(self, "_release_visual_node").bind(pulse))
+	_register_visual_tween(pulse, tween)

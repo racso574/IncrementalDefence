@@ -1,26 +1,29 @@
 extends Control
 
-const LIGHTNING_COOLDOWN: float = 2.4
-const LIGHTNING_AREA_RADIUS: float = 96.0
+const EnemyTrackerScript = preload("res://Scripts/Gameplay/EnemyTracker.gd")
+const RuntimeScenePoolScript = preload("res://Scripts/Gameplay/Pooling/RuntimeScenePool.gd")
+const RuntimeNodePoolScript = preload("res://Scripts/Gameplay/Pooling/RuntimeNodePool.gd")
+const RuntimeVisualFactoryScript = preload("res://Scripts/Gameplay/Visuals/RuntimeVisualFactory.gd")
+const PlayerVisualRuntimeScript = preload("res://Scripts/Gameplay/Visuals/PlayerVisualRuntime.gd")
+
 const LIGHTNING_STRIKE_RADIUS: float = 28.0
 const LIGHTNING_STRIKE_STAGGER: float = 0.08
-
-const SNOWBALL_COOLDOWN: float = 3.1
 const SNOWBALL_PROJECTILE_DURATION: float = 0.4
 const SNOWBALL_IMPACT_RADIUS: float = 28.0
-const SNOWBALL_FIELD_RADIUS: float = 66.0
-const SNOWBALL_FIELD_DURATION: float = 1.8
 const SNOWBALL_FIELD_TICK: float = 0.15
-
-const BLADES_ORBIT_RADIUS: float = 72.0
-const BLADES_ROTATION_SPEED: float = 2.6
 const BLADE_DAMAGE_INTERVAL: float = 0.35
-const BLADE_DAMAGE_PER_HIT: int = 1
+const PROJECTILE_HIT_INTERVAL: float = 0.12
+const RICOCHET_HIT_INTERVAL: float = 0.14
+const BOOMERANG_RETURN_THRESHOLD: float = 18.0
+const ACID_DROP_FALL_DURATION: float = 0.26
+const LASER_BEAM_OVERSCAN: float = 18.0
+const FLAMETHROWER_VISUAL_ALPHA: float = 0.28
 
 @export var starting_gold: int = 250
 @export var default_player_attack_cooldown: float = 0.5
 @export var default_player_damage: int = 1
 @export var click_feedback_duration: float = 0.16
+@export_range(1, 5000, 1, "or_greater") var max_active_enemy_cap: int = 500
 
 @onready var tower_health: HealthController = $TowerAnchor/TowerWrap/TowerBody/HealthController
 @onready var tower_body: Panel = $TowerAnchor/TowerWrap/TowerBody
@@ -28,74 +31,87 @@ const BLADE_DAMAGE_PER_HIT: int = 1
 @onready var enemy_wave_spawner: EnemyWaveSpawner = $EnemyWaveSpawner
 @onready var enemy_layer: Control = $EnemyLayer
 @onready var effect_layer: Control = $EffectLayer
+@onready var top_right_hud: Panel = $TopRightHud
 @onready var survived_time_label: Label = $TopRightHud/TimeLabel
 @onready var end_run_button: Button = $BottomRightHud/EndRunButton
 
-var _attack_cooldown_remaining: float = 0.0
-var _lightning_cooldown_remaining: float = 0.0
-var _snowball_cooldown_remaining: float = 0.0
+var _run_state: Dictionary = {}
+var _timers: Dictionary = {}
 var _blade_rotation: float = 0.0
 var _is_game_over: bool = false
 var _survived_time_sec: float = 0.0
+var _peak_active_enemy_count: int = 0
+var _peak_visible_enemy_count: int = 0
 
-var _player_damage: int = 1
-var _player_attack_cooldown: float = 0.5
-var _damage_level: int = 0
-var _speed_level: int = 0
-
-var _lightning_unlocked: bool = false
-var _lightning_damage: int = 2
-var _lightning_count: int = 3
-var _lightning_cooldown: float = LIGHTNING_COOLDOWN
-var _lightning_area_radius: float = LIGHTNING_AREA_RADIUS
-var _lightning_damage_level: int = 0
-var _lightning_count_level: int = 0
-
-var _snowball_unlocked: bool = false
-var _snowball_damage: int = 2
-var _snowball_cooldown: float = SNOWBALL_COOLDOWN
-var _snowball_slow_factor: float = 0.70
-var _snowball_field_radius: float = SNOWBALL_FIELD_RADIUS
-var _snowball_field_duration: float = SNOWBALL_FIELD_DURATION
-var _snowball_damage_level: int = 0
-var _snowball_slow_level: int = 0
-
-var _blades_unlocked: bool = false
-var _blade_count: int = 3
-var _blade_size: float = 18.0
-var _blade_orbit_radius: float = BLADES_ORBIT_RADIUS
-var _blade_rotation_speed: float = BLADES_ROTATION_SPEED
-var _blade_damage: int = BLADE_DAMAGE_PER_HIT
-var _blade_count_level: int = 0
-var _blade_size_level: int = 0
-
-var _blade_nodes: Array[Panel] = []
 var _blade_hit_cooldowns: Dictionary = {}
-var _active_slow_fields: Array[Dictionary] = []
-var _blade_host: Control
+var _active_slow_fields: Array = []
+var _active_projectiles: Array = []
+var _active_boomerangs: Array = []
+var _active_chain_arrows: Array = []
+var _active_acid_puddles: Array = []
+var _active_lasers: Array = []
+var _active_ricochets: Array = []
+
+var _enemy_tracker: EnemyTrackerScript
+var _runtime_scene_pool: RuntimeScenePoolScript
+var _runtime_node_pool: RuntimeNodePoolScript
+var _runtime_visual_factory: RuntimeVisualFactoryScript
+var _player_visual_runtime: PlayerVisualRuntimeScript
 
 func _ready() -> void:
 	randomize()
-	_blade_host = Control.new()
-	_blade_host.name = "BladeHost"
-	_blade_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_blade_host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	effect_layer.add_child(_blade_host)
+	_enemy_tracker = EnemyTrackerScript.new()
+	_enemy_tracker.name = "EnemyTracker"
+	_enemy_tracker.max_active_enemy_cap = max_active_enemy_cap
+	add_child(_enemy_tracker)
 
-	_apply_run_state(_build_run_state(ScenesManager.consume_payload()))
+	_runtime_scene_pool = RuntimeScenePoolScript.new()
+	_runtime_scene_pool.name = "RuntimeScenePool"
+	add_child(_runtime_scene_pool)
+
+	_runtime_node_pool = RuntimeNodePoolScript.new()
+	_runtime_node_pool.name = "RuntimeNodePool"
+	add_child(_runtime_node_pool)
+
+	_runtime_visual_factory = RuntimeVisualFactoryScript.new()
+	_runtime_visual_factory.name = "RuntimeVisualFactory"
+	add_child(_runtime_visual_factory)
+	_runtime_visual_factory.setup(effect_layer, _runtime_node_pool)
+
+	_player_visual_runtime = PlayerVisualRuntimeScript.new()
+	_player_visual_runtime.name = "PlayerVisualRuntime"
+	add_child(_player_visual_runtime)
+	_player_visual_runtime.setup(effect_layer, _runtime_visual_factory)
+
+	_run_state = PlayerAbilityConfig.merge_run_state(
+		ScenesManager.consume_payload(),
+		starting_gold,
+		default_player_damage,
+		default_player_attack_cooldown
+	)
+	_survived_time_sec = _stat_float("elapsed_time_sec")
+	CurrencySystem.set_amount("gold", _stat_int("gold", starting_gold))
+	_reset_timers()
 
 	tower_health.damaged.connect(_on_tower_damaged)
 	tower_health.died.connect(_on_tower_died)
 	end_run_button.pressed.connect(_on_end_run_pressed)
 	enemy_wave_spawner.enemy_spawned.connect(_on_enemy_spawned)
+	enemy_wave_spawner.set_runtime_services(_enemy_tracker, _runtime_scene_pool, _runtime_visual_factory)
 	enemy_wave_spawner.reset_spawner()
 	enemy_wave_spawner.start_spawning()
-	_attack_cooldown_remaining = _player_attack_cooldown
-	_lightning_cooldown_remaining = _lightning_cooldown
-	_snowball_cooldown_remaining = _snowball_cooldown
+
+	top_right_hud.custom_minimum_size = Vector2(220.0, 108.0)
+	top_right_hud.offset_bottom = 130.0
+	survived_time_label.offset_bottom = -8.0
+	survived_time_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	survived_time_label.add_theme_font_size_override("font_size", 18)
+
 	tower_damage_flash.modulate.a = 0.0
 	_update_survived_time_label()
 	_refresh_blades()
+	_sync_tower_aura_visual()
+	_sync_flamethrower_visual(Vector2.ZERO, false)
 
 func _process(delta: float) -> void:
 	if _is_game_over:
@@ -109,104 +125,87 @@ func _process(delta: float) -> void:
 	_update_snowball(delta)
 	_update_slow_fields(delta)
 	_update_blades(delta)
+	_update_projectile_weapon(delta)
+	_update_active_projectiles(delta)
+	_update_boomerang_weapon(delta)
+	_update_active_boomerangs(delta)
+	_update_chain_arrow_weapon(delta)
+	_update_active_chain_arrows(delta)
+	_update_tower_aura(delta)
+	_update_acid_rain(delta)
+	_update_acid_puddles(delta)
+	_update_laser(delta)
+	_update_active_lasers(delta)
+	_update_map_clear(delta)
+	_update_flamethrower(delta)
+	_update_ricochet_weapon(delta)
+	_update_active_ricochets(delta)
 
-func _build_run_state(payload: Variant) -> Dictionary:
-	var state: Dictionary = {
-		"gold": starting_gold,
-		"player_damage": default_player_damage,
-		"player_attack_cooldown": default_player_attack_cooldown,
-		"damage_level": 0,
-		"speed_level": 0,
-		"elapsed_time_sec": 0.0,
-		"lightning_unlocked": false,
-		"lightning_damage": 2,
-		"lightning_count": 3,
-		"lightning_cooldown": LIGHTNING_COOLDOWN,
-		"lightning_area_radius": LIGHTNING_AREA_RADIUS,
-		"lightning_damage_level": 0,
-		"lightning_count_level": 0,
-		"snowball_unlocked": false,
-		"snowball_damage": 2,
-		"snowball_cooldown": SNOWBALL_COOLDOWN,
-		"snowball_slow_factor": 0.70,
-		"snowball_field_radius": SNOWBALL_FIELD_RADIUS,
-		"snowball_field_duration": SNOWBALL_FIELD_DURATION,
-		"snowball_damage_level": 0,
-		"snowball_slow_level": 0,
-		"blades_unlocked": false,
-		"blade_count": 3,
-		"blade_size": 18.0,
-		"blade_orbit_radius": BLADES_ORBIT_RADIUS,
-		"blade_rotation_speed": BLADES_ROTATION_SPEED,
-		"blade_damage": BLADE_DAMAGE_PER_HIT,
-		"blade_count_level": 0,
-		"blade_size_level": 0
+func _reset_timers() -> void:
+	_timers = {
+		"tick": _stat_float("player_attack_cooldown", default_player_attack_cooldown),
+		"lightning": _stat_float("lightning_cooldown", 2.4),
+		"snowball": _stat_float("snowball_cooldown", 3.1),
+		"projectile": _stat_float("projectile_cooldown", 1.0),
+		"boomerang": _stat_float("boomerang_cooldown", 1.8),
+		"chain_arrow": _stat_float("chain_arrow_cooldown", 2.0),
+		"tower_aura": 0.0,
+		"acid_rain": _stat_float("acid_rain_cooldown", 4.0),
+		"laser": _stat_float("laser_cooldown", 6.0),
+		"map_clear": _stat_float("map_clear_cooldown", 16.0),
+		"flamethrower": 0.0,
+		"ricochet": _stat_float("ricochet_cooldown", 1.7)
 	}
 
-	if typeof(payload) != TYPE_DICTIONARY:
-		return state
+func _stat_bool(key: String, fallback: bool = false) -> bool:
+	return bool(_run_state.get(key, fallback))
 
-	for key in state.keys():
-		if payload.has(key):
-			state[key] = payload[key]
+func _stat_int(key: String, fallback: int = 0) -> int:
+	return int(_run_state.get(key, fallback))
 
-	return state
+func _stat_float(key: String, fallback: float = 0.0) -> float:
+	return float(_run_state.get(key, fallback))
 
-func _apply_run_state(run_state: Dictionary) -> void:
-	CurrencySystem.set_amount("gold", int(run_state.get("gold", starting_gold)))
-	_player_damage = int(run_state.get("player_damage", default_player_damage))
-	_player_attack_cooldown = float(run_state.get("player_attack_cooldown", default_player_attack_cooldown))
-	_damage_level = int(run_state.get("damage_level", 0))
-	_speed_level = int(run_state.get("speed_level", 0))
-	_survived_time_sec = float(run_state.get("elapsed_time_sec", 0.0))
+func _get_valid_enemy_ref(data: Dictionary, key: String) -> GameTestEnemy:
+	var enemy_ref: Variant = data.get(key, null)
+	if enemy_ref == null:
+		return null
+	if not is_instance_valid(enemy_ref):
+		return null
+	var enemy: GameTestEnemy = enemy_ref as GameTestEnemy
+	if enemy == null or enemy.is_defeated():
+		return null
+	return enemy
 
-	_lightning_unlocked = bool(run_state.get("lightning_unlocked", false))
-	_lightning_damage = int(run_state.get("lightning_damage", 2))
-	_lightning_count = int(run_state.get("lightning_count", 3))
-	_lightning_cooldown = float(run_state.get("lightning_cooldown", LIGHTNING_COOLDOWN))
-	_lightning_area_radius = float(run_state.get("lightning_area_radius", LIGHTNING_AREA_RADIUS))
-	_lightning_damage_level = int(run_state.get("lightning_damage_level", 0))
-	_lightning_count_level = int(run_state.get("lightning_count_level", 0))
+func _tick_timer(key: String, delta: float) -> bool:
+	var remaining := maxf(float(_timers.get(key, 0.0)) - delta, 0.0)
+	_timers[key] = remaining
+	return remaining <= 0.0
 
-	_snowball_unlocked = bool(run_state.get("snowball_unlocked", false))
-	_snowball_damage = int(run_state.get("snowball_damage", 2))
-	_snowball_cooldown = float(run_state.get("snowball_cooldown", SNOWBALL_COOLDOWN))
-	_snowball_slow_factor = float(run_state.get("snowball_slow_factor", 0.70))
-	_snowball_field_radius = float(run_state.get("snowball_field_radius", SNOWBALL_FIELD_RADIUS))
-	_snowball_field_duration = float(run_state.get("snowball_field_duration", SNOWBALL_FIELD_DURATION))
-	_snowball_damage_level = int(run_state.get("snowball_damage_level", 0))
-	_snowball_slow_level = int(run_state.get("snowball_slow_level", 0))
-
-	_blades_unlocked = bool(run_state.get("blades_unlocked", false))
-	_blade_count = int(run_state.get("blade_count", 3))
-	_blade_size = float(run_state.get("blade_size", 18.0))
-	_blade_orbit_radius = float(run_state.get("blade_orbit_radius", BLADES_ORBIT_RADIUS))
-	_blade_rotation_speed = float(run_state.get("blade_rotation_speed", BLADES_ROTATION_SPEED))
-	_blade_damage = int(run_state.get("blade_damage", BLADE_DAMAGE_PER_HIT))
-	_blade_count_level = int(run_state.get("blade_count_level", 0))
-	_blade_size_level = int(run_state.get("blade_size_level", 0))
+func _set_timer(key: String, value: float) -> void:
+	_timers[key] = maxf(value, 0.0)
 
 func _update_basic_attack(delta: float) -> void:
-	_attack_cooldown_remaining = maxf(_attack_cooldown_remaining - delta, 0.0)
-	if _attack_cooldown_remaining <= 0.0:
-		_attack_cooldown_remaining = _player_attack_cooldown
-		_perform_player_attack()
+	if not _tick_timer("tick", delta):
+		return
+	_set_timer("tick", _stat_float("player_attack_cooldown", default_player_attack_cooldown))
+	_perform_player_attack()
 
 func _update_lightning(delta: float) -> void:
-	if not _lightning_unlocked:
+	if not _stat_bool("lightning_unlocked"):
 		return
-	_lightning_cooldown_remaining = maxf(_lightning_cooldown_remaining - delta, 0.0)
-	if _lightning_cooldown_remaining <= 0.0:
-		_lightning_cooldown_remaining = _lightning_cooldown
-		_trigger_lightning_burst()
+	if not _tick_timer("lightning", delta):
+		return
+	_set_timer("lightning", _stat_float("lightning_cooldown", 2.4))
+	_trigger_lightning_burst()
 
 func _update_snowball(delta: float) -> void:
-	if not _snowball_unlocked:
+	if not _stat_bool("snowball_unlocked"):
 		return
-	_snowball_cooldown_remaining = maxf(_snowball_cooldown_remaining - delta, 0.0)
-	if _snowball_cooldown_remaining <= 0.0:
-		_snowball_cooldown_remaining = _snowball_cooldown
-		_trigger_snowball()
+	if not _tick_timer("snowball", delta):
+		return
+	_set_timer("snowball", _stat_float("snowball_cooldown", 3.1))
+	_trigger_snowball()
 
 func _update_slow_fields(delta: float) -> void:
 	for i in range(_active_slow_fields.size() - 1, -1, -1):
@@ -216,7 +215,7 @@ func _update_slow_fields(delta: float) -> void:
 
 		var field_node := field.get("node", null) as CanvasItem
 		if field_node != null:
-			field_node.modulate.a = clampf(float(field.get("remaining", 0.0)) / maxf(_snowball_field_duration, 0.01), 0.15, 0.55)
+			field_node.modulate.a = clampf(float(field.get("remaining", 0.0)) / maxf(_stat_float("snowball_field_duration", 1.8), 0.01), 0.15, 0.55)
 
 		if float(field.get("tick_remaining", 0.0)) <= 0.0:
 			field["tick_remaining"] = SNOWBALL_FIELD_TICK
@@ -224,26 +223,21 @@ func _update_slow_fields(delta: float) -> void:
 
 		if float(field.get("remaining", 0.0)) <= 0.0:
 			if field_node != null:
-				field_node.queue_free()
+				_cleanup_runtime_node(field_node)
 			_active_slow_fields.remove_at(i)
 		else:
 			_active_slow_fields[i] = field
 
 func _update_blades(delta: float) -> void:
-	if not _blades_unlocked:
+	if not _stat_bool("blades_unlocked"):
 		_clear_blades()
 		return
 
+	_blade_rotation += _stat_float("blade_rotation_speed", 2.6) * delta
 	_refresh_blades()
-	_blade_rotation += _blade_rotation_speed * delta
 
 	var mouse_position := get_global_mouse_position()
-	for i in range(_blade_nodes.size()):
-		var blade := _blade_nodes[i]
-		var angle := _blade_rotation + TAU * float(i) / float(max(_blade_nodes.size(), 1))
-		var center := mouse_position + Vector2.RIGHT.rotated(angle) * _blade_orbit_radius
-		blade.rotation = angle + PI * 0.5
-		blade.global_position = center - blade.size * 0.5
+	var blade_count: int = _stat_int("blade_count", 3)
 
 	var cooldown_keys: Array = _blade_hit_cooldowns.keys()
 	for enemy_id in cooldown_keys:
@@ -257,12 +251,12 @@ func _update_blades(delta: float) -> void:
 		if hit_cooldown > 0.0:
 			continue
 
-		for i in range(_blade_nodes.size()):
-			var angle := _blade_rotation + TAU * float(i) / float(max(_blade_nodes.size(), 1))
-			var blade_center := mouse_position + Vector2.RIGHT.rotated(angle) * _blade_orbit_radius
-			var hit_radius := _blade_size * 0.55 + enemy_radius
+		for i in range(blade_count):
+			var angle := _blade_rotation + TAU * float(i) / float(max(blade_count, 1))
+			var blade_center := mouse_position + Vector2.RIGHT.rotated(angle) * _stat_float("blade_orbit_radius", 72.0)
+			var hit_radius := _stat_float("blade_size", 18.0) * 0.55 + enemy_radius
 			if blade_center.distance_to(enemy_center) <= hit_radius:
-				enemy.receive_player_damage(_blade_damage)
+				enemy.receive_player_damage(_stat_int("blade_damage", 1))
 				_spawn_blade_hit_feedback(blade_center)
 				_blade_hit_cooldowns[enemy_id] = BLADE_DAMAGE_INTERVAL
 				break
@@ -271,48 +265,539 @@ func _perform_player_attack() -> void:
 	var mouse_position := get_global_mouse_position()
 	var hit_enemy := _find_enemy_at_position(mouse_position)
 	if hit_enemy != null:
-		hit_enemy.receive_player_damage(_player_damage)
+		hit_enemy.receive_player_damage(_stat_int("player_damage", default_player_damage))
 		_spawn_click_feedback(mouse_position, true)
 	else:
 		_spawn_click_feedback(mouse_position, false)
 
-func _find_enemy_at_position(screen_position: Vector2) -> GameTestEnemy:
-	var children := enemy_layer.get_children()
-	for index in range(children.size() - 1, -1, -1):
-		var enemy := children[index] as GameTestEnemy
-		if enemy != null and enemy.is_point_inside_enemy(screen_position):
-			return enemy
-	return null
+func _update_projectile_weapon(delta: float) -> void:
+	if not _stat_bool("projectile_unlocked"):
+		return
+	if not _tick_timer("projectile", delta):
+		return
+	_set_timer("projectile", _stat_float("projectile_cooldown", 1.0))
+	_spawn_projectile()
 
-func _find_enemy_near_position(screen_position: Vector2, radius: float) -> GameTestEnemy:
-	var best_enemy: GameTestEnemy
-	var best_distance: float = INF
-	for enemy in _get_live_enemies():
-		var distance := _get_enemy_center(enemy).distance_to(screen_position)
-		if distance <= radius and distance < best_distance:
-			best_distance = distance
-			best_enemy = enemy
-	return best_enemy
+func _spawn_projectile() -> void:
+	var origin := _get_tower_center()
+	var target_mode := _stat_int("projectile_target_mode", PlayerAbilityConfig.TargetMode.MOUSE)
+	var target_enemy: GameTestEnemy
+	var direction := Vector2.UP
+	if target_mode == PlayerAbilityConfig.TargetMode.NEAREST_ENEMY:
+		target_enemy = _find_nearest_enemy_to_position(origin, INF, {}, true)
+		if target_enemy == null:
+			return
+		direction = (_get_enemy_center(target_enemy) - origin).normalized()
+	else:
+		direction = (get_global_mouse_position() - origin).normalized()
+	if direction == Vector2.ZERO:
+		return
 
-func _get_enemies_in_radius(screen_position: Vector2, radius: float) -> Array[GameTestEnemy]:
-	var hits: Array[GameTestEnemy] = []
-	for enemy in _get_live_enemies():
-		if _get_enemy_center(enemy).distance_to(screen_position) <= radius + _get_enemy_radius(enemy):
-			hits.append(enemy)
-	return hits
+	var radius := _stat_float("projectile_radius", 9.0)
+	var node := _player_visual_runtime.spawn_projectile(origin, radius)
 
-func _get_live_enemies() -> Array[GameTestEnemy]:
-	var enemies: Array[GameTestEnemy] = []
-	for child in enemy_layer.get_children():
-		var enemy := child as GameTestEnemy
-		if enemy != null:
-			enemies.append(enemy)
-	return enemies
+	_active_projectiles.append({
+		"node": node,
+		"position": origin,
+		"direction": direction,
+		"speed": _stat_float("projectile_speed", 580.0),
+		"damage": _stat_int("projectile_damage", 3),
+		"radius": radius,
+		"remaining_pierces": _stat_int("projectile_piercing", 1),
+		"hit_ids": {},
+		"mode": target_mode,
+		"target_enemy": target_enemy,
+		"remaining": 2.4
+	})
+
+func _update_active_projectiles(delta: float) -> void:
+	for i in range(_active_projectiles.size() - 1, -1, -1):
+		var projectile: Dictionary = _active_projectiles[i]
+		projectile["remaining"] = float(projectile.get("remaining", 0.0)) - delta
+		var position: Vector2 = projectile.get("position", Vector2.ZERO)
+		var direction: Vector2 = projectile.get("direction", Vector2.UP)
+
+		position += direction * float(projectile.get("speed", 0.0)) * delta
+		projectile["position"] = position
+
+		var node := projectile.get("node", null) as Control
+		if node != null:
+			node.global_position = position - node.size * 0.5
+			node.rotation = direction.angle()
+
+		if float(projectile.get("remaining", 0.0)) <= 0.0 or _is_outside_play_bounds(position, 64.0):
+			_cleanup_runtime_node(node)
+			_active_projectiles.remove_at(i)
+			continue
+
+		var hit_ids: Dictionary = projectile.get("hit_ids", {})
+		var remaining_pierces: int = int(projectile.get("remaining_pierces", 1))
+		var did_hit: bool = false
+		for enemy in _get_enemies_in_radius(position, float(projectile.get("radius", 0.0))):
+			var enemy_id := enemy.get_instance_id()
+			if hit_ids.has(enemy_id):
+				continue
+			hit_ids[enemy_id] = true
+			enemy.receive_player_damage(int(projectile.get("damage", 0)))
+			remaining_pierces -= 1
+			did_hit = true
+			_spawn_projectile_hit_feedback(position, Color(1.0, 0.76, 0.28, 0.92))
+			if remaining_pierces <= 0:
+				break
+
+		projectile["hit_ids"] = hit_ids
+		projectile["remaining_pierces"] = remaining_pierces
+		if did_hit and remaining_pierces <= 0:
+			_cleanup_runtime_node(node)
+			_active_projectiles.remove_at(i)
+			continue
+
+		_active_projectiles[i] = projectile
+
+func _update_boomerang_weapon(delta: float) -> void:
+	if not _stat_bool("boomerang_unlocked"):
+		return
+	if not _tick_timer("boomerang", delta):
+		return
+	_set_timer("boomerang", _stat_float("boomerang_cooldown", 1.8))
+	_spawn_boomerang()
+
+func _spawn_boomerang() -> void:
+	var origin := _get_tower_center()
+	var target_mode := _stat_int("boomerang_target_mode", PlayerAbilityConfig.TargetMode.MOUSE)
+	var direction := Vector2.ZERO
+	if target_mode == PlayerAbilityConfig.TargetMode.NEAREST_ENEMY:
+		var target_enemy := _find_nearest_enemy_to_position(origin, INF, {}, true)
+		if target_enemy != null:
+			direction = (_get_enemy_center(target_enemy) - origin).normalized()
+	else:
+		direction = (get_global_mouse_position() - origin).normalized()
+	if direction == Vector2.ZERO:
+		return
+
+	var radius := _stat_float("boomerang_radius", 12.0)
+	var node := _player_visual_runtime.spawn_boomerang(origin, radius)
+
+	_active_boomerangs.append({
+		"node": node,
+		"position": origin,
+		"direction": direction,
+		"speed": _stat_float("boomerang_speed", 420.0),
+		"damage": _stat_int("boomerang_damage", 2),
+		"radius": radius,
+		"max_distance": _stat_float("boomerang_distance", 240.0),
+		"distance_travelled": 0.0,
+		"returning": false,
+		"outbound_hit_ids": {},
+		"return_hit_ids": {}
+	})
+
+func _update_active_boomerangs(delta: float) -> void:
+	for i in range(_active_boomerangs.size() - 1, -1, -1):
+		var boomerang: Dictionary = _active_boomerangs[i]
+		var position: Vector2 = boomerang.get("position", Vector2.ZERO)
+		var direction: Vector2 = boomerang.get("direction", Vector2.UP)
+		var speed: float = float(boomerang.get("speed", 0.0))
+		var travel_step: float = speed * delta
+		if bool(boomerang.get("returning", false)):
+			var return_direction := (_get_tower_center() - position).normalized()
+			if return_direction == Vector2.ZERO:
+				return_direction = Vector2.UP
+			direction = return_direction
+		else:
+			boomerang["distance_travelled"] = float(boomerang.get("distance_travelled", 0.0)) + travel_step
+			if float(boomerang.get("distance_travelled", 0.0)) >= float(boomerang.get("max_distance", 0.0)):
+				boomerang["returning"] = true
+		position += direction * travel_step
+		boomerang["position"] = position
+		boomerang["direction"] = direction
+
+		var node := boomerang.get("node", null) as Control
+		if node != null:
+			node.global_position = position - node.size * 0.5
+			node.rotation = direction.angle() + PI * 0.5
+
+		var hit_key := "return_hit_ids" if bool(boomerang.get("returning", false)) else "outbound_hit_ids"
+		var hit_ids: Dictionary = boomerang.get(hit_key, {})
+		for enemy in _get_enemies_in_radius(position, float(boomerang.get("radius", 0.0))):
+			var enemy_id := enemy.get_instance_id()
+			if hit_ids.has(enemy_id):
+				continue
+			hit_ids[enemy_id] = true
+			enemy.receive_player_damage(int(boomerang.get("damage", 0)))
+			_spawn_projectile_hit_feedback(position, Color(0.86, 0.9, 1.0, 0.86))
+		boomerang[hit_key] = hit_ids
+
+		if bool(boomerang.get("returning", false)) and position.distance_to(_get_tower_center()) <= BOOMERANG_RETURN_THRESHOLD:
+			_cleanup_runtime_node(node)
+			_active_boomerangs.remove_at(i)
+			continue
+
+		_active_boomerangs[i] = boomerang
+
+func _update_chain_arrow_weapon(delta: float) -> void:
+	if not _stat_bool("chain_arrow_unlocked"):
+		return
+	if not _tick_timer("chain_arrow", delta):
+		return
+	_set_timer("chain_arrow", _stat_float("chain_arrow_cooldown", 2.0))
+	_spawn_chain_arrow()
+
+func _spawn_chain_arrow() -> void:
+	var origin := _get_tower_center()
+	var target_enemy := _find_nearest_enemy_to_position(origin, INF, {}, true)
+	if target_enemy == null:
+		return
+
+	var radius := _stat_float("chain_arrow_radius", 10.0)
+	var node := _player_visual_runtime.spawn_chain_arrow(origin, radius)
+
+	_active_chain_arrows.append({
+		"node": node,
+		"position": origin,
+		"radius": radius,
+		"speed": _stat_float("chain_arrow_speed", 620.0),
+		"damage": _stat_int("chain_arrow_damage", 2),
+		"remaining_targets": _stat_int("chain_arrow_targets", 4),
+		"search_radius": _stat_float("chain_arrow_search_radius", 220.0),
+		"visited_ids": {},
+		"target_enemy": target_enemy
+	})
+
+func _update_active_chain_arrows(delta: float) -> void:
+	for i in range(_active_chain_arrows.size() - 1, -1, -1):
+		var arrow: Dictionary = _active_chain_arrows[i]
+		var target_enemy: GameTestEnemy = _get_valid_enemy_ref(arrow, "target_enemy")
+		var visited_ids: Dictionary = arrow.get("visited_ids", {})
+		if target_enemy == null or not is_instance_valid(target_enemy):
+			target_enemy = _find_nearest_enemy_to_position(
+				arrow.get("position", Vector2.ZERO),
+				float(arrow.get("search_radius", 0.0)),
+				visited_ids,
+				true
+			)
+			arrow["target_enemy"] = target_enemy
+		if target_enemy == null:
+			_cleanup_runtime_node(arrow.get("node", null) as Node)
+			_active_chain_arrows.remove_at(i)
+			continue
+
+		var position: Vector2 = arrow.get("position", Vector2.ZERO)
+		var target_center := _get_enemy_center(target_enemy)
+		var direction := (target_center - position).normalized()
+		if direction == Vector2.ZERO:
+			direction = Vector2.UP
+		position += direction * float(arrow.get("speed", 0.0)) * delta
+		arrow["position"] = position
+
+		var node := arrow.get("node", null) as Control
+		if node != null:
+			node.rotation = direction.angle()
+			node.global_position = position - node.pivot_offset
+
+		if position.distance_to(target_center) <= float(arrow.get("radius", 0.0)) + _get_enemy_radius(target_enemy) + 6.0:
+			target_enemy.receive_player_damage(int(arrow.get("damage", 0)))
+			_spawn_chain_hit_feedback(target_center)
+			visited_ids[target_enemy.get_instance_id()] = true
+			arrow["visited_ids"] = visited_ids
+			arrow["remaining_targets"] = int(arrow.get("remaining_targets", 0)) - 1
+			if int(arrow.get("remaining_targets", 0)) <= 0:
+				_cleanup_runtime_node(node)
+				_active_chain_arrows.remove_at(i)
+				continue
+
+			var next_target := _find_nearest_enemy_to_position(
+				target_center,
+				float(arrow.get("search_radius", 0.0)),
+				visited_ids,
+				true
+			)
+			arrow["target_enemy"] = next_target
+			if next_target == null:
+				_cleanup_runtime_node(node)
+				_active_chain_arrows.remove_at(i)
+				continue
+
+		_active_chain_arrows[i] = arrow
+
+func _update_tower_aura(delta: float) -> void:
+	_sync_tower_aura_visual()
+	if not _stat_bool("tower_aura_unlocked"):
+		return
+	if not _tick_timer("tower_aura", delta):
+		return
+	_set_timer("tower_aura", _stat_float("tower_aura_tick_interval", 0.45))
+	for enemy in _get_enemies_in_radius(_get_tower_center(), _stat_float("tower_aura_radius", 120.0)):
+		enemy.receive_player_damage(_stat_int("tower_aura_damage", 1))
+
+func _sync_tower_aura_visual() -> void:
+	_player_visual_runtime.sync_tower_aura(
+		_get_tower_center(),
+		_stat_float("tower_aura_radius", 120.0),
+		_stat_bool("tower_aura_unlocked")
+	)
+
+func _update_acid_rain(delta: float) -> void:
+	if not _stat_bool("acid_rain_unlocked"):
+		return
+	if not _tick_timer("acid_rain", delta):
+		return
+	_set_timer("acid_rain", _stat_float("acid_rain_cooldown", 4.0))
+	_trigger_acid_rain()
+
+func _trigger_acid_rain() -> void:
+	for _i in range(_stat_int("acid_rain_drop_count", 3)):
+		var target_position := _get_random_screen_position(32.0)
+		var drop := _player_visual_runtime.spawn_acid_drop(target_position)
+
+		var tween := create_tween()
+		tween.tween_property(drop, "global_position", target_position - drop.size * 0.5, ACID_DROP_FALL_DURATION)
+		tween.finished.connect(_on_acid_drop_landed.bind(drop, target_position))
+		_player_visual_runtime.register_tween(drop, tween)
+
+func _on_acid_drop_landed(drop: ColorRect, target_position: Vector2) -> void:
+	if is_instance_valid(drop):
+		_cleanup_runtime_node(drop)
+	_spawn_acid_puddle(target_position)
+
+func _spawn_acid_puddle(center: Vector2) -> void:
+	var radius := _stat_float("acid_rain_puddle_radius", 56.0)
+	var puddle := _player_visual_runtime.spawn_acid_puddle(center, radius)
+
+	_active_acid_puddles.append({
+		"node": puddle,
+		"center": center,
+		"radius": radius,
+		"remaining": _stat_float("acid_rain_puddle_duration", 2.2),
+		"tick_remaining": 0.0
+	})
+
+func _update_acid_puddles(delta: float) -> void:
+	for i in range(_active_acid_puddles.size() - 1, -1, -1):
+		var puddle: Dictionary = _active_acid_puddles[i]
+		puddle["remaining"] = float(puddle.get("remaining", 0.0)) - delta
+		puddle["tick_remaining"] = float(puddle.get("tick_remaining", 0.0)) - delta
+
+		var puddle_node := puddle.get("node", null) as CanvasItem
+		if puddle_node != null:
+			puddle_node.modulate.a = clampf(
+				float(puddle.get("remaining", 0.0)) / maxf(_stat_float("acid_rain_puddle_duration", 2.2), 0.01),
+				0.12,
+				0.44
+			)
+
+		if float(puddle.get("tick_remaining", 0.0)) <= 0.0:
+			puddle["tick_remaining"] = _stat_float("acid_rain_tick_interval", 0.30)
+			for enemy in _get_enemies_in_radius(
+				puddle.get("center", Vector2.ZERO),
+				float(puddle.get("radius", 0.0))
+			):
+				enemy.receive_player_damage(_stat_int("acid_rain_damage", 1))
+
+		if float(puddle.get("remaining", 0.0)) <= 0.0:
+			_cleanup_runtime_node(puddle_node)
+			_active_acid_puddles.remove_at(i)
+		else:
+			_active_acid_puddles[i] = puddle
+
+func _update_laser(delta: float) -> void:
+	if not _stat_bool("laser_unlocked"):
+		return
+	if not _tick_timer("laser", delta):
+		return
+	_set_timer("laser", _stat_float("laser_cooldown", 6.0))
+	_trigger_laser()
+
+func _trigger_laser() -> void:
+	var aim_info := _resolve_tower_target_info(_stat_int("laser_target_mode", PlayerAbilityConfig.TargetMode.NEAREST_ENEMY))
+	var direction: Vector2 = aim_info.get("direction", Vector2.ZERO)
+	if direction == Vector2.ZERO:
+		return
+
+	var origin := _get_tower_center()
+	var range_value := get_viewport_rect().size.length() + LASER_BEAM_OVERSCAN * 2.0
+	var end := origin + direction * range_value
+	var hit_radius := _stat_float("laser_width", 34.0) * 0.5
+	for enemy in _get_enemies_along_segment(origin, end, hit_radius):
+		enemy.eliminate(true, false)
+
+	var beam := _player_visual_runtime.spawn_laser(
+		origin,
+		range_value + LASER_BEAM_OVERSCAN,
+		_stat_float("laser_width", 34.0),
+		direction
+	)
+
+	_active_lasers.append({
+		"node": beam,
+		"remaining": _stat_float("laser_duration", 0.22),
+		"duration": _stat_float("laser_duration", 0.22)
+	})
+
+func _update_active_lasers(delta: float) -> void:
+	for i in range(_active_lasers.size() - 1, -1, -1):
+		var laser: Dictionary = _active_lasers[i]
+		laser["remaining"] = float(laser.get("remaining", 0.0)) - delta
+		var node := laser.get("node", null) as CanvasItem
+		if node != null:
+			node.modulate.a = clampf(
+				float(laser.get("remaining", 0.0)) / maxf(float(laser.get("duration", 0.22)), 0.01),
+				0.0,
+				0.78
+			)
+		if float(laser.get("remaining", 0.0)) <= 0.0:
+			_cleanup_runtime_node(node)
+			_active_lasers.remove_at(i)
+		else:
+			_active_lasers[i] = laser
+
+func _update_map_clear(delta: float) -> void:
+	if not _stat_bool("map_clear_unlocked"):
+		return
+	if not _tick_timer("map_clear", delta):
+		return
+	_set_timer("map_clear", _stat_float("map_clear_cooldown", 16.0))
+	_trigger_map_clear()
+
+func _trigger_map_clear() -> void:
+	for enemy in _get_live_enemies(true):
+		enemy.eliminate(false, false)
+
+	var wipe := _player_visual_runtime.spawn_map_clear_wipe()
+
+	var tween := create_tween()
+	tween.parallel().tween_property(wipe, "modulate:a", 0.0, 0.24)
+	tween.tween_callback(Callable(_player_visual_runtime, "release_runtime_node").bind(wipe))
+	_player_visual_runtime.register_tween(wipe, tween)
+
+func _update_flamethrower(delta: float) -> void:
+	if not _stat_bool("flamethrower_unlocked"):
+		_sync_flamethrower_visual(Vector2.ZERO, false)
+		return
+
+	var aim_info := _resolve_tower_target_info(_stat_int("flamethrower_target_mode", PlayerAbilityConfig.TargetMode.MOUSE))
+	var direction: Vector2 = aim_info.get("direction", Vector2.ZERO)
+	var is_active := direction != Vector2.ZERO
+	_sync_flamethrower_visual(direction, is_active)
+
+	if not is_active:
+		return
+	if not _tick_timer("flamethrower", delta):
+		return
+	_set_timer("flamethrower", _stat_float("flamethrower_tick_interval", 0.18))
+
+	var origin := _get_tower_center()
+	for enemy in _get_enemies_in_cone(
+		origin,
+		direction,
+		_stat_float("flamethrower_range", 230.0),
+		_stat_float("flamethrower_width", 42.0) * 0.5
+	):
+		enemy.receive_player_damage(_stat_int("flamethrower_damage", 1))
+
+func _sync_flamethrower_visual(direction: Vector2, is_active: bool) -> void:
+	_player_visual_runtime.sync_flamethrower(
+		_get_tower_center(),
+		direction,
+		is_active,
+		_stat_float("flamethrower_range", 230.0),
+		_stat_float("flamethrower_width", 42.0) * 0.5,
+		FLAMETHROWER_VISUAL_ALPHA
+	)
+
+func _update_ricochet_weapon(delta: float) -> void:
+	if not _stat_bool("ricochet_unlocked"):
+		return
+	if not _tick_timer("ricochet", delta):
+		return
+	_set_timer("ricochet", _stat_float("ricochet_cooldown", 1.7))
+	_spawn_ricochet_projectile()
+
+func _spawn_ricochet_projectile() -> void:
+	var origin := _get_tower_center()
+	var target_mode := _stat_int("ricochet_target_mode", PlayerAbilityConfig.TargetMode.MOUSE)
+	var direction := Vector2.ZERO
+	if target_mode == PlayerAbilityConfig.TargetMode.RANDOM_DIRECTION:
+		direction = Vector2.RIGHT.rotated(randf() * TAU)
+	else:
+		direction = (get_global_mouse_position() - origin).normalized()
+	if direction == Vector2.ZERO:
+		direction = Vector2.UP
+
+	var radius := _stat_float("ricochet_radius", 9.0)
+	var node := _player_visual_runtime.spawn_ricochet(origin, radius)
+
+	_active_ricochets.append({
+		"node": node,
+		"position": origin,
+		"velocity": direction * _stat_float("ricochet_speed", 500.0),
+		"damage": _stat_int("ricochet_damage", 1),
+		"radius": radius,
+		"remaining_bounces": _stat_int("ricochet_bounces", 4),
+		"hit_cooldowns": {}
+	})
+
+func _update_active_ricochets(delta: float) -> void:
+	var bounds := get_viewport_rect().size
+	for i in range(_active_ricochets.size() - 1, -1, -1):
+		var ricochet: Dictionary = _active_ricochets[i]
+		var position: Vector2 = ricochet.get("position", Vector2.ZERO)
+		var velocity: Vector2 = ricochet.get("velocity", Vector2.ZERO)
+		position += velocity * delta
+		var radius: float = float(ricochet.get("radius", 0.0))
+
+		var bounced: bool = false
+		if position.x - radius <= 0.0:
+			position.x = radius
+			velocity.x = absf(velocity.x)
+			bounced = true
+		elif position.x + radius >= bounds.x:
+			position.x = bounds.x - radius
+			velocity.x = -absf(velocity.x)
+			bounced = true
+
+		if position.y - radius <= 0.0:
+			position.y = radius
+			velocity.y = absf(velocity.y)
+			bounced = true
+		elif position.y + radius >= bounds.y:
+			position.y = bounds.y - radius
+			velocity.y = -absf(velocity.y)
+			bounced = true
+
+		if bounced:
+			ricochet["remaining_bounces"] = int(ricochet.get("remaining_bounces", 0)) - 1
+			if int(ricochet.get("remaining_bounces", 0)) < 0:
+				_cleanup_runtime_node(ricochet.get("node", null) as Node)
+				_active_ricochets.remove_at(i)
+				continue
+
+		ricochet["position"] = position
+		ricochet["velocity"] = velocity
+
+		var node := ricochet.get("node", null) as Control
+		if node != null:
+			node.global_position = position - node.size * 0.5
+			node.rotation += delta * 7.0
+
+		var hit_cooldowns: Dictionary = ricochet.get("hit_cooldowns", {})
+		var cooldown_keys := hit_cooldowns.keys()
+		for enemy_id in cooldown_keys:
+			hit_cooldowns[enemy_id] = maxf(float(hit_cooldowns[enemy_id]) - delta, 0.0)
+		for enemy in _get_enemies_in_radius(position, radius):
+			var enemy_id := enemy.get_instance_id()
+			if float(hit_cooldowns.get(enemy_id, 0.0)) > 0.0:
+				continue
+			enemy.receive_player_damage(int(ricochet.get("damage", 0)))
+			hit_cooldowns[enemy_id] = RICOCHET_HIT_INTERVAL
+			_spawn_projectile_hit_feedback(position, Color(0.74, 0.92, 1.0, 0.86))
+		ricochet["hit_cooldowns"] = hit_cooldowns
+		_active_ricochets[i] = ricochet
 
 func _trigger_lightning_burst() -> void:
 	var mouse_position := get_global_mouse_position()
-	for i in range(_lightning_count):
-		var strike_point := mouse_position + _random_point_in_circle(_lightning_area_radius)
+	for i in range(_stat_int("lightning_count", 3)):
+		var strike_point := mouse_position + _random_point_in_circle(_stat_float("lightning_area_radius", 96.0))
 		var tween := create_tween()
 		tween.tween_interval(LIGHTNING_STRIKE_STAGGER * i)
 		tween.tween_callback(Callable(self, "_resolve_lightning_strike").bind(strike_point))
@@ -320,28 +805,19 @@ func _trigger_lightning_burst() -> void:
 func _resolve_lightning_strike(strike_point: Vector2) -> void:
 	var hit_enemy := _find_enemy_near_position(strike_point, LIGHTNING_STRIKE_RADIUS)
 	if hit_enemy != null:
-		hit_enemy.receive_player_damage(_lightning_damage)
+		hit_enemy.receive_player_damage(_stat_int("lightning_damage", 2))
 	_spawn_lightning_feedback(strike_point, hit_enemy != null)
 
 func _trigger_snowball() -> void:
 	var tower_center := _get_tower_center()
 	var target_position := get_global_mouse_position()
+	if _stat_int("snowball_target_mode", PlayerAbilityConfig.TargetMode.MOUSE) == PlayerAbilityConfig.TargetMode.NEAREST_ENEMY:
+		var target_enemy := _find_nearest_enemy_to_position(tower_center, INF, {}, true)
+		if target_enemy == null:
+			return
+		target_position = _get_enemy_center(target_enemy)
 	var travel_distance: float = tower_center.distance_to(target_position)
-	var projectile := Panel.new()
-	projectile.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	projectile.size = Vector2(18.0, 18.0)
-	projectile.pivot_offset = projectile.size * 0.5
-	projectile.global_position = tower_center - projectile.size * 0.5
-	projectile.scale = Vector2(0.62, 0.62)
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.86, 0.95, 1.0, 0.98)
-	style.corner_radius_top_left = 24
-	style.corner_radius_top_right = 24
-	style.corner_radius_bottom_right = 24
-	style.corner_radius_bottom_left = 24
-	projectile.add_theme_stylebox_override("panel", style)
-	effect_layer.add_child(projectile)
+	var projectile := _player_visual_runtime.spawn_snowball_projectile(tower_center)
 
 	var distance_factor: float = clampf(travel_distance / 260.0, 0.0, 1.0)
 	var peak_scale: Vector2 = Vector2.ONE * (1.28 + distance_factor * 0.28)
@@ -350,206 +826,147 @@ func _trigger_snowball() -> void:
 	var move_tween := create_tween()
 	move_tween.tween_property(projectile, "global_position", target_position - projectile.size * 0.5, SNOWBALL_PROJECTILE_DURATION)
 	move_tween.finished.connect(_on_snowball_hit.bind(projectile, target_position))
+	_player_visual_runtime.register_tween(projectile, move_tween)
 
 	var scale_tween := create_tween()
 	scale_tween.tween_property(projectile, "scale", peak_scale, SNOWBALL_PROJECTILE_DURATION * 0.5)
 	scale_tween.tween_property(projectile, "scale", end_scale, SNOWBALL_PROJECTILE_DURATION * 0.5)
+	_player_visual_runtime.register_tween(projectile, scale_tween)
 
 func _on_snowball_hit(projectile: Panel, target_position: Vector2) -> void:
 	if is_instance_valid(projectile):
-		projectile.queue_free()
+		_cleanup_runtime_node(projectile)
 
 	var enemies := _get_enemies_in_radius(target_position, SNOWBALL_IMPACT_RADIUS)
 	for enemy in enemies:
-		enemy.receive_player_damage(_snowball_damage)
+		enemy.receive_player_damage(_stat_int("snowball_damage", 2))
 
 	_spawn_snowball_impact_feedback(target_position)
 	_spawn_slow_field(target_position)
 
 func _spawn_slow_field(center: Vector2) -> void:
-	var field := Panel.new()
-	field.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	field.size = Vector2(_snowball_field_radius * 2.0, _snowball_field_radius * 2.0)
-	field.pivot_offset = field.size * 0.5
-	field.global_position = center - field.size * 0.5
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.53, 0.82, 1.0, 0.28)
-	style.corner_radius_top_left = 96
-	style.corner_radius_top_right = 96
-	style.corner_radius_bottom_right = 96
-	style.corner_radius_bottom_left = 96
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.88, 0.97, 1.0, 0.7)
-	field.add_theme_stylebox_override("panel", style)
-	effect_layer.add_child(field)
+	var radius := _stat_float("snowball_field_radius", 66.0)
+	var field := _player_visual_runtime.spawn_slow_field(center, radius)
 
 	_active_slow_fields.append({
 		"node": field,
 		"center": center,
-		"radius": _snowball_field_radius,
-		"remaining": _snowball_field_duration,
+		"radius": radius,
+		"remaining": _stat_float("snowball_field_duration", 1.8),
 		"tick_remaining": 0.0
 	})
 
 func _apply_slow_field(field: Dictionary) -> void:
 	var center: Vector2 = field.get("center", Vector2.ZERO)
-	var radius: float = float(field.get("radius", SNOWBALL_FIELD_RADIUS))
+	var radius: float = float(field.get("radius", 66.0))
 	for enemy in _get_live_enemies():
 		if _get_enemy_center(enemy).distance_to(center) <= radius + _get_enemy_radius(enemy):
-			enemy.apply_slow(_snowball_slow_factor, SNOWBALL_FIELD_TICK + 0.08)
+			enemy.apply_slow(_stat_float("snowball_slow_factor", 0.70), SNOWBALL_FIELD_TICK + 0.08)
 
 func _refresh_blades() -> void:
-	if not _blades_unlocked:
+	if not _stat_bool("blades_unlocked"):
 		_clear_blades()
 		return
 
-	if _blade_nodes.size() == _blade_count:
-		for blade in _blade_nodes:
-			blade.size = Vector2(_blade_size, _blade_size * 0.38)
-			blade.pivot_offset = blade.size * 0.5
-		return
-
-	_clear_blades()
-	for _i in range(_blade_count):
-		var blade := Panel.new()
-		blade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		blade.size = Vector2(_blade_size, _blade_size * 0.38)
-		blade.pivot_offset = blade.size * 0.5
-
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.95, 0.95, 0.98, 0.96)
-		style.corner_radius_top_left = 3
-		style.corner_radius_top_right = 3
-		style.corner_radius_bottom_right = 3
-		style.corner_radius_bottom_left = 3
-		style.border_width_left = 1
-		style.border_width_top = 1
-		style.border_width_right = 1
-		style.border_width_bottom = 1
-		style.border_color = Color(0.56, 0.66, 0.78, 0.9)
-		blade.add_theme_stylebox_override("panel", style)
-
-		_blade_host.add_child(blade)
-		_blade_nodes.append(blade)
+	var mouse_position := get_global_mouse_position()
+	var blade_count: int = _stat_int("blade_count", 3)
+	var blade_size := Vector2(_stat_float("blade_size", 18.0), _stat_float("blade_size", 18.0) * 0.38)
+	var blade_centers: Array[Vector2] = []
+	var blade_angles: Array[float] = []
+	for i in range(blade_count):
+		var angle := _blade_rotation + TAU * float(i) / float(max(blade_count, 1))
+		blade_angles.append(angle + PI * 0.5)
+		blade_centers.append(mouse_position + Vector2.RIGHT.rotated(angle) * _stat_float("blade_orbit_radius", 72.0))
+	_player_visual_runtime.sync_blades(blade_centers, blade_angles, blade_size, true)
 
 func _clear_blades() -> void:
-	for blade in _blade_nodes:
-		if is_instance_valid(blade):
-			blade.queue_free()
-	_blade_nodes.clear()
+	_player_visual_runtime.clear_blades()
+
+func _find_enemy_at_position(screen_position: Vector2) -> GameTestEnemy:
+	return _enemy_tracker.find_enemy_at_position(screen_position)
+
+func _find_enemy_near_position(screen_position: Vector2, radius: float) -> GameTestEnemy:
+	return _find_nearest_enemy_to_position(screen_position, radius)
+
+func _find_nearest_enemy_to_position(screen_position: Vector2, radius: float = INF, excluded_ids: Dictionary = {}, only_visible: bool = false) -> GameTestEnemy:
+	return _enemy_tracker.find_nearest_enemy_to_position(screen_position, radius, excluded_ids, only_visible)
+
+func _find_enemy_colliding(screen_position: Vector2, radius: float) -> GameTestEnemy:
+	return _enemy_tracker.find_enemy_colliding(screen_position, radius)
+
+func _get_enemies_in_radius(screen_position: Vector2, radius: float) -> Array[GameTestEnemy]:
+	return _enemy_tracker.get_enemies_in_radius(screen_position, radius)
+
+func _get_enemies_along_segment(start: Vector2, end: Vector2, radius: float) -> Array[GameTestEnemy]:
+	return _enemy_tracker.get_enemies_along_segment(start, end, radius)
+
+func _get_enemies_in_cone(origin: Vector2, direction: Vector2, distance: float, half_width: float) -> Array[GameTestEnemy]:
+	return _enemy_tracker.get_enemies_in_cone(origin, direction, distance, half_width, true)
+
+func _get_live_enemies(only_visible: bool = false) -> Array[GameTestEnemy]:
+	return _enemy_tracker.get_live_enemies(only_visible)
+
+func _resolve_tower_target_info(target_mode: int) -> Dictionary:
+	var origin := _get_tower_center()
+	match target_mode:
+		PlayerAbilityConfig.TargetMode.NEAREST_ENEMY:
+			var target_enemy := _find_nearest_enemy_to_position(origin, INF, {}, true)
+			if target_enemy == null:
+				return {"direction": Vector2.ZERO, "enemy": null}
+			return {
+				"direction": (_get_enemy_center(target_enemy) - origin).normalized(),
+				"enemy": target_enemy
+			}
+		PlayerAbilityConfig.TargetMode.RANDOM_DIRECTION:
+			return {
+				"direction": Vector2.RIGHT.rotated(randf() * TAU),
+				"enemy": null
+			}
+		_:
+			var mouse_direction := (get_global_mouse_position() - origin).normalized()
+			return {
+				"direction": mouse_direction if mouse_direction != Vector2.ZERO else Vector2.UP,
+				"enemy": null
+			}
+
+func _get_tower_center() -> Vector2:
+	var tower_rect := tower_body.get_global_rect()
+	return tower_rect.position + tower_rect.size * 0.5
+
+func _is_enemy_visible(enemy: GameTestEnemy) -> bool:
+	return _enemy_tracker.is_enemy_visible(enemy)
+
+func _get_random_screen_position(inset: float = 0.0) -> Vector2:
+	var size := get_viewport_rect().size
+	return Vector2(
+		randf_range(inset, maxf(size.x - inset, inset)),
+		randf_range(inset, maxf(size.y - inset, inset))
+	)
+
+func _is_outside_play_bounds(position: Vector2, margin: float = 0.0) -> bool:
+	var bounds := get_viewport_rect().size
+	return position.x < -margin or position.y < -margin or position.x > bounds.x + margin or position.y > bounds.y + margin
+
+func _cleanup_runtime_node(node: Node) -> void:
+	_player_visual_runtime.release_runtime_node(node)
 
 func _spawn_click_feedback(screen_position: Vector2, hit_target: bool) -> void:
-	var marker := Panel.new()
-	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	marker.size = Vector2(22.0, 22.0)
-	marker.pivot_offset = marker.size * 0.5
-	marker.global_position = screen_position - marker.size * 0.5
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(1.0, 0.93, 0.75, 0.95) if hit_target else Color(1.0, 1.0, 1.0, 0.7)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(1.0, 0.4, 0.28, 1.0) if hit_target else Color(0.15, 0.18, 0.18, 0.9)
-	style.corner_radius_top_left = 32
-	style.corner_radius_top_right = 32
-	style.corner_radius_bottom_right = 32
-	style.corner_radius_bottom_left = 32
-	marker.add_theme_stylebox_override("panel", style)
-
-	effect_layer.add_child(marker)
-
-	var tween := create_tween()
-	tween.parallel().tween_property(marker, "scale", Vector2(1.6, 1.6), click_feedback_duration)
-	tween.parallel().tween_property(marker, "modulate:a", 0.0, click_feedback_duration)
-	tween.tween_callback(Callable(marker, "queue_free"))
+	_player_visual_runtime.spawn_click_feedback(screen_position, hit_target, click_feedback_duration)
 
 func _spawn_lightning_feedback(screen_position: Vector2, hit_target: bool) -> void:
-	var beam := ColorRect.new()
-	beam.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	beam.color = Color(1.0, 0.95, 0.64, 0.92) if hit_target else Color(0.92, 0.96, 1.0, 0.78)
-	beam.size = Vector2(8.0, screen_position.y + 12.0)
-	beam.pivot_offset = Vector2(4.0, 0.0)
-	beam.global_position = Vector2(screen_position.x - 4.0, -12.0)
-	effect_layer.add_child(beam)
-
-	var ring := Panel.new()
-	ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ring.size = Vector2(34.0, 34.0)
-	ring.pivot_offset = ring.size * 0.5
-	ring.global_position = screen_position - ring.size * 0.5
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(1.0, 0.95, 0.64, 0.22) if hit_target else Color(0.88, 0.95, 1.0, 0.18)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(1.0, 0.83, 0.31, 0.95)
-	style.corner_radius_top_left = 40
-	style.corner_radius_top_right = 40
-	style.corner_radius_bottom_right = 40
-	style.corner_radius_bottom_left = 40
-	ring.add_theme_stylebox_override("panel", style)
-	effect_layer.add_child(ring)
-
-	var tween := create_tween()
-	tween.parallel().tween_property(beam, "modulate:a", 0.0, 0.16)
-	tween.parallel().tween_property(ring, "scale", Vector2(1.5, 1.5), 0.18)
-	tween.parallel().tween_property(ring, "modulate:a", 0.0, 0.18)
-	tween.tween_callback(Callable(beam, "queue_free"))
-	tween.tween_callback(Callable(ring, "queue_free"))
+	_player_visual_runtime.spawn_lightning_feedback(screen_position, hit_target)
 
 func _spawn_snowball_impact_feedback(screen_position: Vector2) -> void:
-	var burst := Panel.new()
-	burst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	burst.size = Vector2(42.0, 42.0)
-	burst.pivot_offset = burst.size * 0.5
-	burst.global_position = screen_position - burst.size * 0.5
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.82, 0.94, 1.0, 0.28)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.95, 0.99, 1.0, 0.92)
-	style.corner_radius_top_left = 42
-	style.corner_radius_top_right = 42
-	style.corner_radius_bottom_right = 42
-	style.corner_radius_bottom_left = 42
-	burst.add_theme_stylebox_override("panel", style)
-	effect_layer.add_child(burst)
-
-	var tween := create_tween()
-	tween.parallel().tween_property(burst, "scale", Vector2(1.8, 1.8), 0.24)
-	tween.parallel().tween_property(burst, "modulate:a", 0.0, 0.24)
-	tween.tween_callback(Callable(burst, "queue_free"))
+	_player_visual_runtime.spawn_snowball_impact_feedback(screen_position)
 
 func _spawn_blade_hit_feedback(screen_position: Vector2) -> void:
-	var spark := Panel.new()
-	spark.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	spark.size = Vector2(16.0, 16.0)
-	spark.pivot_offset = spark.size * 0.5
-	spark.global_position = screen_position - spark.size * 0.5
+	_player_visual_runtime.spawn_blade_hit_feedback(screen_position)
 
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.94, 0.97, 1.0, 0.78)
-	style.corner_radius_top_left = 20
-	style.corner_radius_top_right = 20
-	style.corner_radius_bottom_right = 20
-	style.corner_radius_bottom_left = 20
-	spark.add_theme_stylebox_override("panel", style)
-	effect_layer.add_child(spark)
+func _spawn_projectile_hit_feedback(screen_position: Vector2, fill_color: Color) -> void:
+	_player_visual_runtime.spawn_projectile_hit_feedback(screen_position, fill_color)
 
-	var tween := create_tween()
-	tween.parallel().tween_property(spark, "scale", Vector2(1.4, 1.4), 0.14)
-	tween.parallel().tween_property(spark, "modulate:a", 0.0, 0.14)
-	tween.tween_callback(Callable(spark, "queue_free"))
+func _spawn_chain_hit_feedback(screen_position: Vector2) -> void:
+	_player_visual_runtime.spawn_chain_hit_feedback(screen_position)
 
 func _on_enemy_defeated(gold_reward: int) -> void:
 	CurrencySystem.add_currency("gold", gold_reward)
@@ -584,52 +1001,33 @@ func _on_end_run_pressed() -> void:
 func _go_to_upgrade_menu() -> void:
 	_is_game_over = true
 	enemy_wave_spawner.stop_spawning()
-	TransitionManager.change_scene("UpgradeMenu", "iris_circle", {
+	TransitionManager.change_scene("AbilitiesDebugMenu", "iris_circle", {
 		"data": _build_upgrade_payload()
 	})
 
-func _get_tower_center() -> Vector2:
-	var tower_rect := tower_body.get_global_rect()
-	return tower_rect.position + tower_rect.size * 0.5
-
 func _build_upgrade_payload() -> Dictionary:
-	return {
-		"gold": CurrencySystem.get_amount("gold"),
-		"player_damage": _player_damage,
-		"player_attack_cooldown": _player_attack_cooldown,
-		"damage_level": _damage_level,
-		"speed_level": _speed_level,
-		"elapsed_time_sec": _survived_time_sec,
-		"lightning_unlocked": _lightning_unlocked,
-		"lightning_damage": _lightning_damage,
-		"lightning_count": _lightning_count,
-		"lightning_cooldown": _lightning_cooldown,
-		"lightning_area_radius": _lightning_area_radius,
-		"lightning_damage_level": _lightning_damage_level,
-		"lightning_count_level": _lightning_count_level,
-		"snowball_unlocked": _snowball_unlocked,
-		"snowball_damage": _snowball_damage,
-		"snowball_cooldown": _snowball_cooldown,
-		"snowball_slow_factor": _snowball_slow_factor,
-		"snowball_field_radius": _snowball_field_radius,
-		"snowball_field_duration": _snowball_field_duration,
-		"snowball_damage_level": _snowball_damage_level,
-		"snowball_slow_level": _snowball_slow_level,
-		"blades_unlocked": _blades_unlocked,
-		"blade_count": _blade_count,
-		"blade_size": _blade_size,
-		"blade_orbit_radius": _blade_orbit_radius,
-		"blade_rotation_speed": _blade_rotation_speed,
-		"blade_damage": _blade_damage,
-		"blade_count_level": _blade_count_level,
-		"blade_size_level": _blade_size_level
-	}
+	var payload: Dictionary = _run_state.duplicate(true)
+	payload["gold"] = CurrencySystem.get_amount("gold")
+	payload["elapsed_time_sec"] = _survived_time_sec
+	return payload
 
 func _update_survived_time_label() -> void:
 	var total_seconds := int(floor(_survived_time_sec))
 	var minutes := int(total_seconds / 60)
 	var seconds := total_seconds % 60
-	survived_time_label.text = "Time: %02d:%02d" % [minutes, seconds]
+	var active_enemy_count := _enemy_tracker.get_live_enemy_count()
+	var visible_enemy_count := _enemy_tracker.get_live_enemy_count(true)
+	_peak_active_enemy_count = maxi(_peak_active_enemy_count, active_enemy_count)
+	_peak_visible_enemy_count = maxi(_peak_visible_enemy_count, visible_enemy_count)
+	survived_time_label.text = "Time: %02d:%02d\nEnemies: %d (%d visible)\nPeak: %d (%d visible)\nFPS: %d" % [
+		minutes,
+		seconds,
+		active_enemy_count,
+		visible_enemy_count,
+		_peak_active_enemy_count,
+		_peak_visible_enemy_count,
+		Engine.get_frames_per_second()
+	]
 
 func _random_point_in_circle(radius: float) -> Vector2:
 	var angle := randf() * TAU
@@ -637,9 +1035,7 @@ func _random_point_in_circle(radius: float) -> Vector2:
 	return Vector2.RIGHT.rotated(angle) * distance
 
 func _get_enemy_center(enemy: GameTestEnemy) -> Vector2:
-	var rect := enemy.get_global_rect()
-	return rect.position + rect.size * 0.5
+	return _enemy_tracker.get_enemy_center(enemy)
 
 func _get_enemy_radius(enemy: GameTestEnemy) -> float:
-	var rect := enemy.get_global_rect()
-	return minf(rect.size.x, rect.size.y) * 0.33
+	return _enemy_tracker.get_enemy_radius(enemy)

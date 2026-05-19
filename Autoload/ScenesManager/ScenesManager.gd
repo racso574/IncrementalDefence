@@ -5,7 +5,8 @@ const SCENE_REGISTRY := {
 	"Game": "res://Scenes/Game.tscn",
 	"GameTest": "res://Scenes/GameTest.tscn",
 	"Options": "res://Scenes/Options.tscn",
-	"UpgradeMenu": "res://Scenes/UpgradeMenu.tscn"
+	"UpgradeMenu": "res://Scenes/UpgradeMenu.tscn",
+	"AbilitiesDebugMenu": "res://Scenes/AbilitiesDebugMenu.tscn"
 }
 
 enum CacheMode { NONE, ON_DEMAND, PRELOAD_ALL }

@@ -1,4 +1,4 @@
-[gd_scene format=3 uid="uid://dgcn1mdo7o4th"]
+[gd_scene format=3 uid="uid://dows1c8y4n0nh"]
 
 [ext_resource type="Script" path="res://Scripts/Gameplay/UpgradeMenuController.gd" id="1_9f7ha"]
 [ext_resource type="Script" path="res://Scripts/UI/CurrencyValueLabel.gd" id="2_0g14h"]

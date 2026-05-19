@@ -3,33 +3,58 @@
 [ext_resource type="Script" uid="uid://gqk0fdr3s2td" path="res://Scripts/Gameplay/Spawning/EnemyWaveSet.gd" id="1_wave_set"]
 [ext_resource type="Script" uid="uid://k0rbrmysadr5" path="res://Scripts/Gameplay/Spawning/EnemyWaveDefinition.gd" id="2_wave_def"]
 [ext_resource type="Script" uid="uid://djtv5bqs8qjt1" path="res://Scripts/Gameplay/Spawning/EnemySpawnOption.gd" id="3_spawn_opt"]
-[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemySplitter.tscn" id="7_enemy_splitter"]
-[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemySummoner.tscn" id="8_enemy_summoner"]
+[ext_resource type="PackedScene" uid="uid://djq11kr5y30qh" path="res://Scenes/Gameplay/GameTestEnemy.tscn" id="4_enemy_basic"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemyBrute.tscn" id="5_enemy_brute"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemyRanged.tscn" id="6_enemy_ranged"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemyBomber.tscn" id="7_enemy_bomber"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemyHealer.tscn" id="8_enemy_healer"]
 [ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemyDasher.tscn" id="9_enemy_dasher"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemySplitter.tscn" id="10_enemy_splitter"]
+[ext_resource type="PackedScene" path="res://Scenes/Gameplay/GameTestEnemySummoner.tscn" id="11_enemy_summoner"]
 
-[sub_resource type="Resource" id="SpawnOpeningSplitter"]
+[sub_resource type="Resource" id="SpawnOptionBasic"]
 script = ExtResource("3_spawn_opt")
-enemy_scene = ExtResource("7_enemy_splitter")
-weight = 2.0
+enemy_scene = ExtResource("4_enemy_basic")
 
-[sub_resource type="Resource" id="SpawnOpeningSummoner"]
+[sub_resource type="Resource" id="SpawnOptionBrute"]
 script = ExtResource("3_spawn_opt")
-enemy_scene = ExtResource("8_enemy_summoner")
-weight = 2.0
+enemy_scene = ExtResource("5_enemy_brute")
 
-[sub_resource type="Resource" id="SpawnOpeningDasher"]
+[sub_resource type="Resource" id="SpawnOptionRanged"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("6_enemy_ranged")
+
+[sub_resource type="Resource" id="SpawnOptionBomber"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("7_enemy_bomber")
+
+[sub_resource type="Resource" id="SpawnOptionHealer"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("8_enemy_healer")
+
+[sub_resource type="Resource" id="SpawnOptionDasher"]
 script = ExtResource("3_spawn_opt")
 enemy_scene = ExtResource("9_enemy_dasher")
-weight = 0.5
+
+[sub_resource type="Resource" id="SpawnOptionSplitter"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("10_enemy_splitter")
+
+[sub_resource type="Resource" id="SpawnOptionSummoner"]
+script = ExtResource("3_spawn_opt")
+enemy_scene = ExtResource("11_enemy_summoner")
 
 [sub_resource type="Resource" id="WaveOpening"]
 script = ExtResource("2_wave_def")
 wave_name = "Opening"
 duration_sec = -1.0
 min_alive = 100
-start_spawn_interval = 1.35
-end_spawn_interval = 0.8400000000000001
-spawn_options = Array[ExtResource("3_spawn_opt")]([SubResource("SpawnOpeningSplitter"), SubResource("SpawnOpeningSummoner"), SubResource("SpawnOpeningDasher")])
+max_alive = 300
+enemies_per_spawn_tick = 10
+start_spawn_interval = 0.1
+end_spawn_interval = 0.1
+catchup_interval_multiplier = 1.0
+spawn_options = Array[ExtResource("3_spawn_opt")]([SubResource("SpawnOptionBasic"), SubResource("SpawnOptionBrute"), SubResource("SpawnOptionRanged"), SubResource("SpawnOptionBomber"), SubResource("SpawnOptionHealer"), SubResource("SpawnOptionDasher"), SubResource("SpawnOptionSplitter"), SubResource("SpawnOptionSummoner")])
 
 [resource]
 script = ExtResource("1_wave_set")
